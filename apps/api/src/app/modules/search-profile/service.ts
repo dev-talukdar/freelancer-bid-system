@@ -1,3 +1,4 @@
+ 
 import { searchProfileSchema, type SearchProfileInput } from '@fbs/shared';
 
 import { SearchProfileModel } from './model.js';
@@ -9,6 +10,7 @@ interface SearchProfileCreatePayload {
   excludedKeywords: string[];
   jobIds: number[];
   countries: string[];
+  currencies: string[];
   languages: string[];
   projectTypes: Array<'fixed' | 'hourly'>;
   pollIntervalSeconds: number;
@@ -16,11 +18,11 @@ interface SearchProfileCreatePayload {
   soundEnabled: boolean;
   allowLocalProjects: boolean;
   maximumProjectAgeMinutes: number;
-  minimumFixedBudget: number | null;
-  maximumFixedBudget: number | null;
-  minimumHourlyRate: number | null;
-  maximumHourlyRate: number | null;
-  maximumBidCount: number | null;
+  minimumFixedBudget?: number | null;
+  maximumFixedBudget?: number | null;
+  minimumHourlyRate?: number | null;
+  maximumHourlyRate?: number | null;
+  maximumBidCount?: number | null;
 }
 
 type SearchProfileUpdatePayload = Partial<SearchProfileCreatePayload>;
@@ -28,13 +30,14 @@ type SearchProfileUpdatePayload = Partial<SearchProfileCreatePayload>;
 export const buildSearchProfileCreatePayload = (input: unknown): SearchProfileCreatePayload => {
   const parsed = searchProfileSchema.parse(input);
 
-  return {
+  const payload: SearchProfileCreatePayload = {
     name: parsed.name,
     enabled: parsed.enabled,
     keywords: parsed.keywords,
     excludedKeywords: parsed.excludedKeywords,
     jobIds: parsed.jobIds,
     countries: parsed.countries,
+    currencies: parsed.currencies,
     languages: parsed.languages,
     projectTypes: parsed.projectTypes,
     pollIntervalSeconds: parsed.pollIntervalSeconds,
@@ -42,12 +45,17 @@ export const buildSearchProfileCreatePayload = (input: unknown): SearchProfileCr
     soundEnabled: parsed.soundEnabled,
     allowLocalProjects: parsed.allowLocalProjects,
     maximumProjectAgeMinutes: parsed.maximumProjectAgeMinutes,
-    minimumFixedBudget: parsed.minimumFixedBudget ?? null,
-    maximumFixedBudget: parsed.maximumFixedBudget ?? null,
-    minimumHourlyRate: parsed.minimumHourlyRate ?? null,
-    maximumHourlyRate: parsed.maximumHourlyRate ?? null,
-    maximumBidCount: parsed.maximumBidCount ?? null,
   };
+
+  if (parsed.minimumFixedBudget !== undefined)
+    payload.minimumFixedBudget = parsed.minimumFixedBudget;
+  if (parsed.maximumFixedBudget !== undefined)
+    payload.maximumFixedBudget = parsed.maximumFixedBudget;
+  if (parsed.minimumHourlyRate !== undefined) payload.minimumHourlyRate = parsed.minimumHourlyRate;
+  if (parsed.maximumHourlyRate !== undefined) payload.maximumHourlyRate = parsed.maximumHourlyRate;
+  if (parsed.maximumBidCount !== undefined) payload.maximumBidCount = parsed.maximumBidCount;
+
+  return payload;
 };
 
 export const buildSearchProfileUpdatePayload = (input: unknown): SearchProfileUpdatePayload => {
@@ -77,6 +85,10 @@ export const buildSearchProfileUpdatePayload = (input: unknown): SearchProfileUp
 
   if (parsed.countries !== undefined) {
     payload.countries = parsed.countries;
+  }
+
+  if (parsed.currencies !== undefined) {
+    payload.currencies = parsed.currencies;
   }
 
   if (parsed.languages !== undefined) {
@@ -139,9 +151,25 @@ export const seedSearchProfile = async (): Promise<void> => {
 
   await SearchProfileModel.create(
     buildSearchProfileCreatePayload({
-      name: 'Default monitoring profile - add real Freelancer job IDs',
+      name: 'Web development monitoring',
       enabled: true,
-      keywords: ['typescript', 'node', 'react'],
+      keywords: [
+        'javascript',
+        'typescript',
+        'node.js',
+        'express.js',
+        'mongodb',
+        'react',
+        'next.js',
+        'full stack development',
+        'website build',
+        'website development',
+        'web application',
+        'saas',
+        'dashboard',
+        'admin panel',
+        'client portal',
+      ],
       excludedKeywords: [
         'casino',
         'gambling',
@@ -154,9 +182,40 @@ export const seedSearchProfile = async (): Promise<void> => {
         'homework',
       ],
       jobIds: [],
-      countries: [],
+      countries: [
+        'us',
+        'ca',
+        'au',
+        'gb',
+        'de',
+        'fr',
+        'be',
+        'ae',
+        'kw',
+        'jo',
+        'bn',
+        'ch',
+        'se',
+        'pt',
+        'sg',
+        'ie',
+        'it',
+        'es',
+        'gr',
+        'nl',
+        'sa',
+        'il',
+        'nz',
+        'hk',
+        'qa',
+      ],
+      currencies: ['USD', 'NZD', 'AUD', 'GBP', 'HKD', 'SGD', 'EUR', 'CAD'],
       languages: ['en'],
       projectTypes: ['fixed', 'hourly'],
+      minimumFixedBudget: 250,
+      maximumFixedBudget: null,
+      minimumHourlyRate: 30,
+      maximumHourlyRate: null,
       pollIntervalSeconds: 30,
       maximumProjectAgeMinutes: 10,
       notificationEnabled: true,
