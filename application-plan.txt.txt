@@ -1,0 +1,42 @@
+Final application plan
+Phase 1 — Personal token and alerts
+Personal Access Token settings
+/self token validation
+Active-project polling
+Skill, country, language and budget filters
+20–30 second polling
+Rate-limit header parsing
+Deduplication
+Chrome popup
+Browser notification
+Alert sound
+Open project action
+Phase 2 — Proposal assistant
+Full project details
+Technical match score
+Project risk detection
+Proposal draft
+Suggested amount
+Suggested delivery period
+Portfolio matching
+Manual editing
+Phase 3 — Controlled bid submission
+Confirm personal token supports fln:project_manage
+Check existing bid remotely
+Validate project is still open
+Validate required skills
+Submit only after explicit approval
+Store bid ID and request ID
+Support bid updates and retraction
+Phase 4 — Optional guarded automatic mode
+
+Only after controlled submission has been tested reliably:
+
+Daily bid cap
+Minimum match score
+Maximum competing bids
+Allowed countries
+Minimum budget
+Excluded keywords
+Duplicate prevention
+Emergency kill switch
