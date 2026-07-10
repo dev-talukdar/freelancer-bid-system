@@ -4,12 +4,12 @@ import { logger } from '../../config/logger.js';
 import { env } from '../../config/env.js';
 import { FreelancerClient } from '../freelancer-client/client.js';
 import { DetectedProjectModel } from '../detected-project/model.js';
-import { activeProfile } from '../search-profile/service.js';
 import { createSkipReasons, projectSkipReason } from './filter.js';
 import { PollLock } from './lock.js';
 
 import type { NormalizedProject } from '../freelancer-client/types.js';
 import type { SearchProfileDocument } from '../search-profile/model.js';
+import { getActiveProfile } from '../search-profile/service.js';
 
 interface DetectedProjectCreateInput {
   freelancerProjectId: number;
@@ -43,13 +43,15 @@ export function buildDetectedProjectCreatePayload(
   };
   const clientCountry = project.clientCountry ?? project.clientCountryCode;
   if (clientCountry !== undefined) payload.clientCountry = clientCountry;
-  if (project.previewDescription !== undefined) payload.descriptionPreview = project.previewDescription;
+  if (project.previewDescription !== undefined)
+    payload.descriptionPreview = project.previewDescription;
   if (project.currency?.code !== undefined) payload.currency = project.currency.code;
   if (project.budget?.minimum !== undefined) payload.budgetMinimum = project.budget.minimum;
   if (project.budget?.maximum !== undefined) payload.budgetMaximum = project.budget.maximum;
   if (project.bidStats?.bidCount !== undefined) payload.bidCount = project.bidStats.bidCount;
   if (project.bidStats?.bidAvg !== undefined) payload.averageBid = project.bidStats.bidAvg;
-  if (project.timeSubmitted !== undefined) payload.timeSubmitted = new Date(project.timeSubmitted * 1000);
+  if (project.timeSubmitted !== undefined)
+    payload.timeSubmitted = new Date(project.timeSubmitted * 1000);
   if (project.timeUpdated !== undefined) payload.timeUpdated = new Date(project.timeUpdated * 1000);
   return payload;
 }
@@ -96,7 +98,7 @@ export class ProjectMonitor {
       const started = Date.now();
       const skipReasons = createSkipReasons();
       try {
-        const profile = await activeProfile();
+        const profile = await getActiveProfile();
         if (!profile) return { returned: 0, matched: 0, new: 0, skipped: 0, skipReasons };
         this.state.currentPollingIntervalSeconds = Math.max(20, profile.pollIntervalSeconds);
         const projects = await this.client.activeProjects({

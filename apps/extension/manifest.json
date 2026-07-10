@@ -5,8 +5,18 @@
   "description": "Local-only Freelancer.com project monitoring alerts.",
   "permissions": ["alarms", "notifications", "storage", "tabs", "offscreen"],
   "host_permissions": ["http://127.0.0.1:4300/*"],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "action": {
-    "default_popup": "index.html"
+    "default_popup": "index.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
   "background": {
     "service_worker": "sw.js",

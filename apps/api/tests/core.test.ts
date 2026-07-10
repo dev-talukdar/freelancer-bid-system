@@ -2,9 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { normalizeFreelancerSeoUrl } from '@fbs/shared';
 import { Types } from 'mongoose';
 import { buildFreelancerQuery } from '../src/app/modules/freelancer-client/query.js';
-import { calculateAdaptiveDelay, parseRateLimitHeaders, parseRateLimitLimit } from '../src/app/modules/freelancer-client/rate-limit.js';
+import {
+  calculateAdaptiveDelay,
+  parseRateLimitHeaders,
+  parseRateLimitLimit,
+} from '../src/app/modules/freelancer-client/rate-limit.js';
 import { normalizeFreelancerProject } from '../src/app/modules/freelancer-client/normalize.js';
-import { createSkipReasons, isProjectOpen, projectMatches, projectSkipReason, type ProjectFilterProfile } from '../src/app/modules/project-monitor/filter.js';
+import {
+  createSkipReasons,
+  isProjectOpen,
+  projectMatches,
+  projectSkipReason,
+  type ProjectFilterProfile,
+} from '../src/app/modules/project-monitor/filter.js';
 import { PollLock } from '../src/app/modules/project-monitor/lock.js';
 import { mapFreelancerError } from '../src/app/error/app-error.js';
 import { realisticFreelancerActiveProjectResponse } from './fixtures/freelancer-active-project-response.js';
@@ -24,9 +34,32 @@ const activeProfile: ProjectFilterProfile = {
   maximumProjectAgeMinutes: 10,
 };
 
-const legacyProfile: ProjectFilterProfile = { ...activeProfile, keywords: ['node'], excludedKeywords: ['spam'], jobIds: [9], countries: ['us'], projectTypes: ['fixed'], allowLocalProjects: false, maximumBidCount: 5 };
-const legacyProject = normalizeFreelancerProject({ id: 1, title: 'Node API', type: 'fixed', status: 'active', time_submitted: Math.floor(Date.now() / 1000), seo_url: 'node-api', language: 'en', local: false, bid_stats: { bid_count: 2 }, jobs: [{ id: 9, name: 'Node' }], location: { country: { code: 'us' } } })!;
-const normalizedRealisticProject = normalizeFreelancerProject(realisticFreelancerActiveProjectResponse.result.projects[0])!;
+const legacyProfile: ProjectFilterProfile = {
+  ...activeProfile,
+  keywords: ['node'],
+  excludedKeywords: ['spam'],
+  jobIds: [9],
+  countries: ['us'],
+  projectTypes: ['fixed'],
+  allowLocalProjects: false,
+  maximumBidCount: 5,
+};
+const legacyProject = normalizeFreelancerProject({
+  id: 1,
+  title: 'Node API',
+  type: 'fixed',
+  status: 'active',
+  time_submitted: Math.floor(Date.now() / 1000),
+  seo_url: 'node-api',
+  language: 'en',
+  local: false,
+  bid_stats: { bid_count: 2 },
+  jobs: [{ id: 9, name: 'Node' }],
+  location: { country: { code: 'us' } },
+})!;
+const normalizedRealisticProject = normalizeFreelancerProject(
+  realisticFreelancerActiveProjectResponse.result.projects[0],
+)!;
 const realisticProject = {
   ...normalizedRealisticProject,
   timeSubmitted: Math.floor(Date.now() / 1000),
@@ -53,9 +86,13 @@ describe('api foundations', () => {
       { limit: 200 },
     ]);
     expect(parseRateLimitLimit(null)).toEqual([]);
-    expect(parseRateLimitHeaders(new Headers({ 'RateLimit-Limit': '10;window=1' }))).toEqual({ windows: [{ limit: 10, windowSeconds: 1 }] });
+    expect(parseRateLimitHeaders(new Headers({ 'RateLimit-Limit': '10;window=1' }))).toEqual({
+      windows: [{ limit: 10, windowSeconds: 1 }],
+    });
     expect(parseRateLimitHeaders(new Headers({ 'RateLimit-Remaining': '7' })).remaining).toBe(7);
-    expect(parseRateLimitHeaders(new Headers({ 'RateLimit-Remaining': 'invalid' }))).toEqual({ windows: [] });
+    expect(parseRateLimitHeaders(new Headers({ 'RateLimit-Remaining': 'invalid' }))).toEqual({
+      windows: [],
+    });
   });
 
   it('filters local projects and matches configured filters', () => {
@@ -70,7 +107,18 @@ describe('api foundations', () => {
 
   it('locks concurrent polls', async () => {
     const lock = new PollLock();
-    await expect(Promise.all([lock.runExclusive(() => new Promise((r) => setTimeout(() => r(true), 20))), lock.runExclusive(async () => true)])).rejects.toThrow('Poll already running');
+
+    const firstPoll = lock.runExclusive(
+      () =>
+        new Promise<boolean>((resolve) => {
+          setTimeout(() => resolve(true), 20);
+        }),
+    );
+
+    const secondPoll = lock.runExclusive(() => Promise.resolve(true));
+
+    await expect(secondPoll).rejects.toThrow('Poll already running');
+    await expect(firstPoll).resolves.toBe(true);
   });
 
   it('maps freelancer api errors', () => {
@@ -99,7 +147,9 @@ describe('freelancer project normalization and matching', () => {
   });
 
   it('matches one keyword case-insensitively', () => {
-    expect(projectMatches({ ...activeProfile, keywords: ['DASHBOARD'] }, realisticProject)).toBe(true);
+    expect(projectMatches({ ...activeProfile, keywords: ['DASHBOARD'] }, realisticProject)).toBe(
+      true,
+    );
   });
 
   it('matches keywords from normalized job names', () => {
@@ -110,27 +160,65 @@ describe('freelancer project normalization and matching', () => {
   });
 
   it('accepts active status and open frontend status', () => {
-    expect(isProjectOpen({ ...realisticProject, frontendProjectStatus: undefined, status: 'active' })).toBe(true);
-    expect(isProjectOpen({ ...realisticProject, frontendProjectStatus: 'open', status: 'closed' })).toBe(true);
+    expect(
+      isProjectOpen({ ...realisticProject, frontendProjectStatus: undefined, status: 'active' }),
+    ).toBe(true);
+    expect(
+      isProjectOpen({ ...realisticProject, frontendProjectStatus: 'open', status: 'closed' }),
+    ).toBe(true);
   });
 
   it('rejects deleted and closed projects', () => {
-    expect(projectSkipReason(activeProfile, { ...realisticProject, deleted: true })).toBe('deleted');
-    expect(projectSkipReason(activeProfile, { ...realisticProject, frontendProjectStatus: 'closed', status: 'active' })).toBe('notOpen');
-    expect(projectSkipReason(activeProfile, { ...realisticProject, frontendProjectStatus: undefined, status: 'closed' })).toBe('notOpen');
+    expect(projectSkipReason(activeProfile, { ...realisticProject, deleted: true })).toBe(
+      'deleted',
+    );
+    expect(
+      projectSkipReason(activeProfile, {
+        ...realisticProject,
+        frontendProjectStatus: 'closed',
+        status: 'active',
+      }),
+    ).toBe('notOpen');
+    expect(
+      projectSkipReason(activeProfile, {
+        ...realisticProject,
+        frontendProjectStatus: undefined,
+        status: 'closed',
+      }),
+    ).toBe('notOpen');
   });
 
   it('does not reject missing optional fields unnecessarily', () => {
-    const minimal: NormalizedProject = { id: 99, title: 'React work', type: 'fixed', status: 'active', timeSubmitted: Math.floor(Date.now() / 1000), jobs: [] };
+    const minimal: NormalizedProject = {
+      id: 99,
+      title: 'React work',
+      type: 'fixed',
+      status: 'active',
+      timeSubmitted: Math.floor(Date.now() / 1000),
+      jobs: [],
+    };
     expect(projectMatches({ ...activeProfile, languages: [] }, minimal)).toBe(true);
   });
 
   it('handles nullable numeric filters and reports accurate reasons', () => {
-    expect(projectSkipReason({ ...activeProfile, maximumBidCount: null }, realisticProject)).toBeUndefined();
-    expect(projectSkipReason({ ...activeProfile, maximumBidCount: 1 }, realisticProject)).toBe('bidCountExceeded');
-    expect(projectSkipReason({ ...activeProfile, minimumFixedBudget: 1000 }, realisticProject)).toBe('fixedBudgetMismatch');
-    expect(projectSkipReason({ ...activeProfile, maximumFixedBudget: 10 }, realisticProject)).toBe('fixedBudgetMismatch');
-    expect(projectSkipReason({ ...activeProfile, minimumHourlyRate: 100 }, { ...realisticProject, type: 'hourly' })).toBe('hourlyRateMismatch');
+    expect(
+      projectSkipReason({ ...activeProfile, maximumBidCount: null }, realisticProject),
+    ).toBeUndefined();
+    expect(projectSkipReason({ ...activeProfile, maximumBidCount: 1 }, realisticProject)).toBe(
+      'bidCountExceeded',
+    );
+    expect(
+      projectSkipReason({ ...activeProfile, minimumFixedBudget: 1000 }, realisticProject),
+    ).toBe('fixedBudgetMismatch');
+    expect(projectSkipReason({ ...activeProfile, maximumFixedBudget: 10 }, realisticProject)).toBe(
+      'fixedBudgetMismatch',
+    );
+    expect(
+      projectSkipReason(
+        { ...activeProfile, minimumHourlyRate: 100 },
+        { ...realisticProject, type: 'hourly' },
+      ),
+    ).toBe('hourlyRateMismatch');
   });
 
   it('allows local projects when allowLocalProjects is true', () => {
@@ -140,13 +228,31 @@ describe('freelancer project normalization and matching', () => {
   it('applies project recency filtering from timeSubmitted', () => {
     const now = Date.now();
     const nowSeconds = Math.floor(now / 1000);
-    const profile: ProjectFilterProfile = { ...activeProfile, maximumProjectAgeMinutes: 10, keywords: [] };
-    const base = { ...realisticProject, timeSubmitted: nowSeconds, timeUpdated: nowSeconds - 365 * 24 * 60 * 60 };
+    const profile: ProjectFilterProfile = {
+      ...activeProfile,
+      maximumProjectAgeMinutes: 10,
+      keywords: [],
+    };
+    const base = {
+      ...realisticProject,
+      timeSubmitted: nowSeconds,
+      timeUpdated: nowSeconds - 365 * 24 * 60 * 60,
+    };
 
     expect(projectMatches(profile, { ...base, timeSubmitted: nowSeconds - 2 * 60 })).toBe(true);
-    expect(projectMatches(profile, { ...base, timeSubmitted: Math.ceil((now - 10 * 60 * 1000) / 1000) })).toBe(true);
-    expect(projectSkipReason(profile, { ...base, timeSubmitted: nowSeconds - 11 * 60 })).toBe('tooOld');
-    expect(projectSkipReason(profile, { ...base, timeSubmitted: nowSeconds - 11 * 60, timeUpdated: nowSeconds })).toBe('tooOld');
+    expect(
+      projectMatches(profile, { ...base, timeSubmitted: Math.ceil((now - 10 * 60 * 1000) / 1000) }),
+    ).toBe(true);
+    expect(projectSkipReason(profile, { ...base, timeSubmitted: nowSeconds - 11 * 60 })).toBe(
+      'tooOld',
+    );
+    expect(
+      projectSkipReason(profile, {
+        ...base,
+        timeSubmitted: nowSeconds - 11 * 60,
+        timeUpdated: nowSeconds,
+      }),
+    ).toBe('tooOld');
     expect(projectSkipReason(profile, { ...base, timeSubmitted: undefined })).toBe('invalidShape');
   });
 
@@ -168,7 +274,11 @@ describe('freelancer project normalization and matching', () => {
     ['academic homework portal'],
     ['CaSiNo admin'],
   ])('rejects excluded keyword match: %s', (title) => {
-    const profile: ProjectFilterProfile = { ...activeProfile, keywords: [], excludedKeywords: ['casino', 'crypto casino', 'betting', 'slot', 'academic', 'homework'] };
+    const profile: ProjectFilterProfile = {
+      ...activeProfile,
+      keywords: [],
+      excludedKeywords: ['casino', 'crypto casino', 'betting', 'slot', 'academic', 'homework'],
+    };
     expect(projectSkipReason(profile, { ...realisticProject, title })).toBe('excludedKeyword');
   });
 
@@ -183,13 +293,24 @@ describe('mongoose payload builders', () => {
     expect(Object.hasOwn(omitted, 'maximumBidCount')).toBe(false);
     const explicitNull = buildSearchProfileCreatePayload({ name: 'Nulls', maximumBidCount: null });
     expect(explicitNull.maximumBidCount).toBeNull();
-    const populated = buildSearchProfileCreatePayload({ name: 'Populated', maximumBidCount: 3, minimumFixedBudget: 100 });
+    const populated = buildSearchProfileCreatePayload({
+      name: 'Populated',
+      maximumBidCount: 3,
+      minimumFixedBudget: 100,
+    });
     expect(populated.maximumBidCount).toBe(3);
     expect(populated.minimumFixedBudget).toBe(100);
   });
 
   it('omits undefined optional detected project values and keeps ObjectId persistence boundary', () => {
-    const minimal: NormalizedProject = { id: 99, title: 'React work', type: 'fixed', status: 'active', timeSubmitted: Math.floor(Date.now() / 1000), jobs: [] };
+    const minimal: NormalizedProject = {
+      id: 99,
+      title: 'React work',
+      type: 'fixed',
+      status: 'active',
+      timeSubmitted: Math.floor(Date.now() / 1000),
+      jobs: [],
+    };
     const payload = buildDetectedProjectCreatePayload(objectIdProfile, minimal);
     expect(payload.searchProfileId).toBeInstanceOf(Types.ObjectId);
     expect(Object.hasOwn(payload, 'descriptionPreview')).toBe(false);

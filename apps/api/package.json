@@ -13,22 +13,22 @@
   "dependencies": {
     "@fbs/shared": "0.1.0",
     "cors": "latest",
+    "dotenv": "latest",
     "express": "latest",
     "express-rate-limit": "latest",
     "helmet": "latest",
     "mongoose": "latest",
     "pino": "latest",
-    "pino-http": "latest",
-    "zod": "latest",
-    "dotenv": "latest"
+    "pino-http": "^11.0.0",
+    "zod": "latest"
   },
   "devDependencies": {
     "@types/cors": "latest",
     "@types/express": "latest",
+    "@types/node": "latest",
     "supertest": "latest",
     "tsx": "latest",
     "typescript": "latest",
-    "vitest": "latest",
-    "@types/node": "latest"
+    "vitest": "latest"
   }
 }
