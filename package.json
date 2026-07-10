@@ -1,1 +1,49 @@
-{"name":"freelancer-bid-system","private":true,"type":"module","engines":{"node":">=22"},"packageManager":"pnpm@10.13.1","scripts":{"dev":"pnpm -r --parallel dev","dev:api":"pnpm --filter @fbs/api dev","dev:extension":"pnpm --filter @fbs/extension dev","build":"pnpm -r build","build:api":"pnpm --filter @fbs/api build","build:extension":"pnpm --filter @fbs/extension build","lint":"eslint .","lint:fix":"eslint . --fix","typecheck":"pnpm -r typecheck","test":"pnpm -r test","test:watch":"pnpm -r test:watch","format":"prettier . --write","format:check":"prettier . --check","prepare":"husky || true"},"devDependencies":{"@eslint/js":"latest","@types/node":"latest","eslint":"latest","eslint-config-prettier":"latest","eslint-plugin-react-hooks":"latest","globals":"latest","husky":"latest","lint-staged":"latest","prettier":"latest","typescript":"latest","typescript-eslint":"latest","vitest":"latest"},"lint-staged":{"*.{ts,tsx,js,json,md,css}":["prettier --write","eslint --fix"]}}
+{
+  "name": "freelancer-bid-system",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "npm@10.13.1",
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:api": "npm run dev --workspace=@fbs/api",
+    "dev:extension": "npm run dev --workspace=@fbs/extension",
+    "build": "npm run build --workspaces --if-present",
+    "build:api": "npm run build --workspace=@fbs/api",
+    "build:extension": "npm run build --workspace=@fbs/extension",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:watch": "npm run test:watch --workspaces --if-present",
+    "format": "prettier . --write",
+    "format:check": "prettier . --check",
+    "prepare": "husky || true"
+  },
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "@types/node": "latest",
+    "eslint": "latest",
+    "eslint-config-prettier": "latest",
+    "eslint-plugin-react-hooks": "latest",
+    "globals": "latest",
+    "husky": "latest",
+    "lint-staged": "latest",
+    "prettier": "latest",
+    "typescript": "latest",
+    "typescript-eslint": "latest",
+    "vitest": "latest"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,json,md,css}": [
+      "prettier --write",
+      "eslint --fix"
+    ]
+  }
+}
