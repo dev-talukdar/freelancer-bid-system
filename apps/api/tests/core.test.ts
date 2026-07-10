@@ -3,7 +3,7 @@ import { normalizeFreelancerSeoUrl } from '@fbs/shared';
 import { buildFreelancerQuery } from '../src/app/modules/freelancer-client/query.js';
 import { parseRateLimitLimit, calculateAdaptiveDelay } from '../src/app/modules/freelancer-client/rate-limit.js';
 import { normalizeFreelancerProject } from '../src/app/modules/freelancer-client/normalize.js';
-import { isProjectOpen, projectMatches, projectSkipReason } from '../src/app/modules/project-monitor/filter.js';
+import { createSkipReasons, isProjectOpen, projectMatches, projectSkipReason } from '../src/app/modules/project-monitor/filter.js';
 import { PollLock } from '../src/app/modules/project-monitor/lock.js';
 import { mapFreelancerError } from '../src/app/error/app-error.js';
 import { realisticFreelancerActiveProjectResponse } from './fixtures/freelancer-active-project-response.js';
@@ -18,6 +18,7 @@ const activeProfile = {
   languages: ['en'],
   projectTypes: ['fixed', 'hourly'],
   allowLocalProjects: true,
+  maximumProjectAgeMinutes: 10,
   maximumBidCount: undefined,
   minimumFixedBudget: undefined,
   maximumFixedBudget: undefined,
@@ -26,8 +27,12 @@ const activeProfile = {
 } as unknown as SearchProfileDocument;
 
 const legacyProfile = { ...activeProfile, keywords: ['node'], excludedKeywords: ['spam'], jobIds: [9], countries: ['us'], projectTypes: ['fixed'], allowLocalProjects: false, maximumBidCount: 5 } as unknown as SearchProfileDocument;
-const legacyProject = normalizeFreelancerProject({ id: 1, title: 'Node API', type: 'fixed', status: 'active', seo_url: 'node-api', language: 'en', local: false, bid_stats: { bid_count: 2 }, jobs: [{ id: 9, name: 'Node' }], location: { country: { code: 'us' } } })!;
-const realisticProject = normalizeFreelancerProject(realisticFreelancerActiveProjectResponse.result.projects[0])!;
+const legacyProject = normalizeFreelancerProject({ id: 1, title: 'Node API', type: 'fixed', status: 'active', time_submitted: Math.floor(Date.now() / 1000), seo_url: 'node-api', language: 'en', local: false, bid_stats: { bid_count: 2 }, jobs: [{ id: 9, name: 'Node' }], location: { country: { code: 'us' } } })!;
+const normalizedRealisticProject = normalizeFreelancerProject(realisticFreelancerActiveProjectResponse.result.projects[0])!;
+const realisticProject = {
+  ...normalizedRealisticProject,
+  timeSubmitted: Math.floor(Date.now() / 1000),
+};
 
 describe('api foundations', () => {
   it('serializes repeated array query parameters', () => {
@@ -65,12 +70,12 @@ describe('api foundations', () => {
 
 describe('freelancer project normalization and matching', () => {
   it('normalizes snake_case response fields', () => {
-    expect(realisticProject.previewDescription).toBe('Build a React admin dashboard');
-    expect(realisticProject.frontendProjectStatus).toBe('open');
-    expect(realisticProject.timeSubmitted).toBe(1710000000);
-    expect(realisticProject.timeUpdated).toBe(1710000100);
-    expect(realisticProject.bidStats).toEqual({ bidCount: 3, bidAvg: 420 });
-    expect(realisticProject.seoUrl).toBe('reactjs/React-dashboard-development');
+    expect(normalizedRealisticProject.previewDescription).toBe('Build a React admin dashboard');
+    expect(normalizedRealisticProject.frontendProjectStatus).toBe('open');
+    expect(normalizedRealisticProject.timeSubmitted).toBe(1710000000);
+    expect(normalizedRealisticProject.timeUpdated).toBe(1710000100);
+    expect(normalizedRealisticProject.bidStats).toEqual({ bidCount: 3, bidAvg: 420 });
+    expect(normalizedRealisticProject.seoUrl).toBe('reactjs/React-dashboard-development');
   });
 
   it('allows empty jobIds and countries, including missing country', () => {
@@ -97,7 +102,7 @@ describe('freelancer project normalization and matching', () => {
   });
 
   it('does not reject missing optional fields unnecessarily', () => {
-    const minimal: NormalizedProject = { id: 99, title: 'React work', type: 'fixed', status: 'active', jobs: [] };
+    const minimal: NormalizedProject = { id: 99, title: 'React work', type: 'fixed', status: 'active', timeSubmitted: Math.floor(Date.now() / 1000), jobs: [] };
     expect(projectMatches({ ...activeProfile, languages: [] } as SearchProfileDocument, minimal)).toBe(true);
   });
 
@@ -116,6 +121,47 @@ describe('freelancer project normalization and matching', () => {
       }
     }
     expect(inserted).toBe(1);
+  });
+
+
+  it('applies project recency filtering from timeSubmitted', () => {
+    const now = Date.now();
+    const nowSeconds = Math.floor(now / 1000);
+    const profile = { ...activeProfile, maximumProjectAgeMinutes: 10, keywords: [] } as SearchProfileDocument;
+    const base = { ...realisticProject, timeSubmitted: nowSeconds, timeUpdated: nowSeconds - 365 * 24 * 60 * 60 };
+
+    expect(projectMatches(profile, { ...base, timeSubmitted: nowSeconds - 2 * 60 })).toBe(true);
+    expect(projectMatches(profile, { ...base, timeSubmitted: Math.ceil((now - 10 * 60 * 1000) / 1000) })).toBe(true);
+    expect(projectSkipReason(profile, { ...base, timeSubmitted: nowSeconds - 11 * 60 })).toBe('tooOld');
+    expect(projectSkipReason(profile, { ...base, timeSubmitted: nowSeconds - 11 * 60, timeUpdated: nowSeconds })).toBe('tooOld');
+    expect(projectSkipReason(profile, { ...base, timeSubmitted: undefined })).toBe('invalidShape');
+  });
+
+  it('includes tooOld in skip reason diagnostics', () => {
+    const skipReasons = createSkipReasons();
+    const reason = projectSkipReason(
+      { ...activeProfile, maximumProjectAgeMinutes: 10, keywords: [] } as SearchProfileDocument,
+      { ...realisticProject, timeSubmitted: Math.floor(Date.now() / 1000) - 11 * 60 },
+    );
+    if (reason) skipReasons[reason]++;
+    expect(skipReasons.tooOld).toBe(1);
+  });
+
+  it.each([
+    ['Casino website'],
+    ['crypto casino platform'],
+    ['online betting dashboard'],
+    ['slot game development'],
+    ['academic homework portal'],
+    ['CaSiNo admin'],
+  ])('rejects excluded keyword match: %s', (title) => {
+    const profile = { ...activeProfile, keywords: [], excludedKeywords: ['casino', 'crypto casino', 'betting', 'slot', 'academic', 'homework'] } as SearchProfileDocument;
+    expect(projectSkipReason(profile, { ...realisticProject, title })).toBe('excludedKeyword');
+  });
+
+  it('allows an unrelated React dashboard when excluded keywords do not match', () => {
+    const profile = { ...activeProfile, keywords: ['react'], excludedKeywords: ['casino', 'betting', 'slot', 'academic', 'homework'] } as SearchProfileDocument;
+    expect(projectMatches(profile, { ...realisticProject, title: 'React dashboard' })).toBe(true);
   });
 
   it('passes the mocked realistic React project through the matcher', () => {
