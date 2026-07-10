@@ -1,1 +1,34 @@
-{"name":"@fbs/api","version":"0.1.0","type":"module","scripts":{"dev":"tsx watch src/server.ts","build":"tsc -b","typecheck":"tsc -b --noEmit","test":"vitest run","test:watch":"vitest","start":"node dist/server.js"},"dependencies":{"@fbs/shared":"workspace:*","cors":"latest","express":"latest","express-rate-limit":"latest","helmet":"latest","mongoose":"latest","pino":"latest","pino-http":"latest","zod":"latest"},"devDependencies":{"@types/cors":"latest","@types/express":"latest","supertest":"latest","tsx":"latest","typescript":"latest","vitest":"latest"}}
+{
+  "name": "@fbs/api",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@fbs/shared": "0.1.0",
+    "cors": "latest",
+    "express": "latest",
+    "express-rate-limit": "latest",
+    "helmet": "latest",
+    "mongoose": "latest",
+    "pino": "latest",
+    "pino-http": "latest",
+    "zod": "latest",
+    "dotenv": "latest"
+  },
+  "devDependencies": {
+    "@types/cors": "latest",
+    "@types/express": "latest",
+    "supertest": "latest",
+    "tsx": "latest",
+    "typescript": "latest",
+    "vitest": "latest",
+    "@types/node": "latest"
+  }
+}

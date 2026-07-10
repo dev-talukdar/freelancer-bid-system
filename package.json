@@ -11,20 +11,19 @@
   },
   "packageManager": "npm@10.13.1",
   "scripts": {
-    "dev": "npm run dev --workspaces --if-present",
-    "dev:api": "npm run dev --workspace=@fbs/api",
-    "dev:extension": "npm run dev --workspace=@fbs/extension",
-    "build": "npm run build --workspaces --if-present",
+    "dev": "npm run build --workspace=@fbs/shared && concurrently -n api,extension -c blue,green \"npm run dev --workspace=@fbs/api\" \"npm run dev --workspace=@fbs/extension\"",
+    "dev:api": "npm run build --workspace=@fbs/shared && npm run dev --workspace=@fbs/api",
+    "dev:extension": "npm run build --workspace=@fbs/shared && npm run dev --workspace=@fbs/extension",
+    "build": "npm run build --workspace=@fbs/shared && npm run build --workspace=@fbs/api && npm run build --workspace=@fbs/extension",
     "build:api": "npm run build --workspace=@fbs/api",
     "build:extension": "npm run build --workspace=@fbs/extension",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspace=@fbs/shared && npm run typecheck --workspace=@fbs/api && npm run typecheck --workspace=@fbs/extension",
     "test": "npm run test --workspaces --if-present",
     "test:watch": "npm run test:watch --workspaces --if-present",
     "format": "prettier . --write",
-    "format:check": "prettier . --check",
-    "prepare": "husky || true"
+    "format:check": "prettier . --check"
   },
   "devDependencies": {
     "@eslint/js": "latest",
@@ -38,7 +37,8 @@
     "prettier": "latest",
     "typescript": "latest",
     "typescript-eslint": "latest",
-    "vitest": "latest"
+    "vitest": "latest",
+    "concurrently": "latest"
   },
   "lint-staged": {
     "*.{ts,tsx,js,json,md,css}": [
