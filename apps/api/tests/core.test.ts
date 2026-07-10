@@ -28,6 +28,7 @@ const activeProfile: ProjectFilterProfile = {
   excludedKeywords: [],
   jobIds: [],
   countries: [],
+  currencies: [],
   languages: ['en'],
   projectTypes: ['fixed', 'hourly'],
   allowLocalProjects: true,
@@ -40,6 +41,7 @@ const legacyProfile: ProjectFilterProfile = {
   excludedKeywords: ['spam'],
   jobIds: [9],
   countries: ['us'],
+  currencies: ['USD'],
   projectTypes: ['fixed'],
   allowLocalProjects: false,
   maximumBidCount: 5,
@@ -53,6 +55,7 @@ const legacyProject = normalizeFreelancerProject({
   seo_url: 'node-api',
   language: 'en',
   local: false,
+  currency: { code: 'USD' },
   bid_stats: { bid_count: 2 },
   jobs: [{ id: 9, name: 'Node' }],
   location: { country: { code: 'us' } },
@@ -200,6 +203,13 @@ describe('freelancer project normalization and matching', () => {
     expect(projectMatches({ ...activeProfile, languages: [] }, minimal)).toBe(true);
   });
 
+  it('filters projects by allowed currencies', () => {
+    expect(projectMatches({ ...activeProfile, currencies: ['USD'] }, realisticProject)).toBe(true);
+    expect(projectSkipReason({ ...activeProfile, currencies: ['EUR'] }, realisticProject)).toBe(
+      'currencyMismatch',
+    );
+  });
+
   it('handles nullable numeric filters and reports accurate reasons', () => {
     expect(
       projectSkipReason({ ...activeProfile, maximumBidCount: null }, realisticProject),
@@ -215,7 +225,7 @@ describe('freelancer project normalization and matching', () => {
     );
     expect(
       projectSkipReason(
-        { ...activeProfile, minimumHourlyRate: 100 },
+        { ...activeProfile, minimumHourlyRate: 1000 },
         { ...realisticProject, type: 'hourly' },
       ),
     ).toBe('hourlyRateMismatch');
@@ -259,9 +269,11 @@ describe('freelancer project normalization and matching', () => {
   it('includes new skip reason diagnostics', () => {
     const skipReasons = createSkipReasons();
     skipReasons.bidCountExceeded++;
+    skipReasons.currencyMismatch++;
     skipReasons.fixedBudgetMismatch++;
     skipReasons.hourlyRateMismatch++;
     expect(skipReasons.bidCountExceeded).toBe(1);
+    expect(skipReasons.currencyMismatch).toBe(1);
     expect(skipReasons.fixedBudgetMismatch).toBe(1);
     expect(skipReasons.hourlyRateMismatch).toBe(1);
   });

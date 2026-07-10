@@ -17,6 +17,7 @@ export const realisticFreelancerActiveProjectResponse = {
         time_submitted: 1710000000,
         time_updated: 1710000100,
         jobs: [{ id: 69, name: 'React.js', seo_url: 'react-js' }],
+        currency: { code: 'USD' },
         budget: { minimum: 250, maximum: 750 },
         bid_stats: { bid_count: 3, bid_avg: 420 },
       },

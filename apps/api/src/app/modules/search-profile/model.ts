@@ -8,6 +8,7 @@ const schema = new Schema(
     excludedKeywords: { type: [String], default: [] },
     jobIds: { type: [Number], default: [] },
     countries: { type: [String], default: [] },
+    currencies: { type: [String], default: [] },
     languages: { type: [String], default: [] },
     projectTypes: { type: [String], enum: ['fixed', 'hourly'], default: ['fixed', 'hourly'] },
     minimumFixedBudget: { type: Number, default: null },
@@ -19,7 +20,12 @@ const schema = new Schema(
     notificationEnabled: { type: Boolean, default: true },
     soundEnabled: { type: Boolean, default: true },
     allowLocalProjects: { type: Boolean, default: false },
-    maximumProjectAgeMinutes: { type: Number, default: DEFAULT_MAXIMUM_PROJECT_AGE_MINUTES, min: 1, max: 1440 },
+    maximumProjectAgeMinutes: {
+      type: Number,
+      default: DEFAULT_MAXIMUM_PROJECT_AGE_MINUTES,
+      min: 1,
+      max: 1440,
+    },
   },
   { timestamps: true },
 );
