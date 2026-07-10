@@ -1,4 +1,4 @@
-import { Schema, model, type InferSchemaType } from 'mongoose';
+import { Schema, model, type InferSchemaType, type Types } from 'mongoose';
 import { DEFAULT_MAXIMUM_PROJECT_AGE_MINUTES, DEFAULT_POLL_INTERVAL_SECONDS } from '@fbs/shared';
 const schema = new Schema(
   {
@@ -10,11 +10,11 @@ const schema = new Schema(
     countries: { type: [String], default: [] },
     languages: { type: [String], default: [] },
     projectTypes: { type: [String], enum: ['fixed', 'hourly'], default: ['fixed', 'hourly'] },
-    minimumFixedBudget: Number,
-    maximumFixedBudget: Number,
-    minimumHourlyRate: Number,
-    maximumHourlyRate: Number,
-    maximumBidCount: Number,
+    minimumFixedBudget: { type: Number, default: null },
+    maximumFixedBudget: { type: Number, default: null },
+    minimumHourlyRate: { type: Number, default: null },
+    maximumHourlyRate: { type: Number, default: null },
+    maximumBidCount: { type: Number, default: null },
     pollIntervalSeconds: { type: Number, default: DEFAULT_POLL_INTERVAL_SECONDS, min: 20 },
     notificationEnabled: { type: Boolean, default: true },
     soundEnabled: { type: Boolean, default: true },
@@ -23,5 +23,5 @@ const schema = new Schema(
   },
   { timestamps: true },
 );
-export type SearchProfileDocument = InferSchemaType<typeof schema> & { _id: string };
+export type SearchProfileDocument = InferSchemaType<typeof schema> & { _id: Types.ObjectId };
 export const SearchProfileModel = model('SearchProfile', schema);
