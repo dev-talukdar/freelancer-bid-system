@@ -7,20 +7,14 @@
     "outDir": "dist",
     "rootDir": "src",
     "composite": true,
-    "types": ["chrome", "vite/client"]
+    "noEmit": true,
+    "types": ["chrome", "vite/client", "vitest/globals"]
   },
   "references": [
     {
       "path": "../../packages/shared"
     }
   ],
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "exclude": [
-    "dist",
-    "node_modules",
-    "src/**/*.test.ts",
-    "src/**/*.test.tsx",
-    "src/**/*.spec.ts",
-    "src/**/*.spec.tsx"
-  ]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"],
+  "exclude": ["dist", "node_modules", "coverage"]
 }
