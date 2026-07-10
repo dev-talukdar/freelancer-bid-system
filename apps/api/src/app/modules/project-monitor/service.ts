@@ -17,7 +17,10 @@ export interface MonitorRuntime {
 export class ProjectMonitor {
   private timer: NodeJS.Timeout | undefined;
   readonly lock = new PollLock();
-  state: MonitorRuntime = { running: false, currentPollingIntervalSeconds: DEFAULT_POLL_INTERVAL_SECONDS };
+  state: MonitorRuntime = {
+    running: false,
+    currentPollingIntervalSeconds: DEFAULT_POLL_INTERVAL_SECONDS,
+  };
 
   constructor(private client = new FreelancerClient()) {}
 
@@ -35,7 +38,10 @@ export class ProjectMonitor {
 
   private schedule() {
     if (!this.state.running) return;
-    this.timer = setTimeout(() => void this.poll(), this.state.currentPollingIntervalSeconds * 1000);
+    this.timer = setTimeout(
+      () => void this.poll(),
+      this.state.currentPollingIntervalSeconds * 1000,
+    );
   }
 
   async poll() {
@@ -62,7 +68,8 @@ export class ProjectMonitor {
           user_display_info: true,
           user_employer_reputation: true,
         });
-        if (env.NODE_ENV === 'development' && projects[0]) logger.debug({ project: projects[0] }, 'first normalized freelancer project sample');
+        if (env.NODE_ENV === 'development' && projects[0])
+          logger.debug({ project: projects[0] }, 'first normalized freelancer project sample');
         let matched = 0;
         let newCount = 0;
         for (const project of projects) {
@@ -103,7 +110,9 @@ export class ProjectMonitor {
               jobs: project.jobs,
               clientCountry: project.clientCountry ?? project.clientCountryCode,
               seoUrl: project.seoUrl ?? String(project.id),
-              timeSubmitted: project.timeSubmitted ? new Date(project.timeSubmitted * 1000) : undefined,
+              timeSubmitted: project.timeSubmitted
+                ? new Date(project.timeSubmitted * 1000)
+                : undefined,
               timeUpdated: project.timeUpdated ? new Date(project.timeUpdated * 1000) : undefined,
               rawSnapshot: undefined,
             });
@@ -116,11 +125,26 @@ export class ProjectMonitor {
             throw e;
           }
         }
-        await DetectedProjectModel.deleteMany({ detectedAt: { $lt: new Date(Date.now() - env.DETECTED_PROJECT_RETENTION_DAYS * 86400_000) } });
+        await DetectedProjectModel.deleteMany({
+          detectedAt: {
+            $lt: new Date(Date.now() - env.DETECTED_PROJECT_RETENTION_DAYS * 86400_000),
+          },
+        });
         this.state.lastSuccessfulPoll = new Date();
         this.state.lastPollingError = undefined;
         const skipped = Object.values(skipReasons).reduce((total, count) => total + count, 0);
-        logger.info({ returned: projects.length, matched, new: newCount, skipped, skipReasons, durationMs: Date.now() - started, rateLimit: this.client.rateLimitState }, 'poll complete');
+        logger.info(
+          {
+            returned: projects.length,
+            matched,
+            new: newCount,
+            skipped,
+            skipReasons,
+            durationMs: Date.now() - started,
+            rateLimit: this.client.rateLimitState,
+          },
+          'poll complete',
+        );
         return { returned: projects.length, matched, new: newCount, skipped, skipReasons };
       } catch (e) {
         this.state.lastPollingError = e instanceof Error ? e.message : 'Unknown polling error';

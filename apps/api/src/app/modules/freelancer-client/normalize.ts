@@ -1,6 +1,8 @@
 import type { FreelancerProject, NormalizedProject } from './types.js';
 
-export function normalizeFreelancerProject(project: FreelancerProject): NormalizedProject | undefined {
+export function normalizeFreelancerProject(
+  project: FreelancerProject,
+): NormalizedProject | undefined {
   if (typeof project.id !== 'number' || typeof project.title !== 'string') return undefined;
 
   return {
