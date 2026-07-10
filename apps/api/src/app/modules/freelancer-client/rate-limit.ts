@@ -6,32 +6,35 @@ export interface RateLimitState {
   windows: RateLimitWindow[];
   remaining?: number;
 }
+
 export function parseRateLimitLimit(header: string | null): RateLimitWindow[] {
   if (!header) return [];
-  return header
-    .split(',')
-    .map((p) => p.trim())
-    .filter(Boolean)
-    .map((part) => {
-      const [limitRaw, ...attrs] = part.split(';');
-      const limit = Number(limitRaw);
-      const win = attrs
-        .map((a) => a.trim())
-        .find((a) => a.startsWith('window='))
-        ?.split('=')[1];
-      return Number.isFinite(limit)
-        ? { limit, windowSeconds: win ? Number(win) : undefined }
-        : undefined;
-    })
-    .filter((v): v is RateLimitWindow => Boolean(v));
+  const windows: RateLimitWindow[] = [];
+  for (const segment of header.split(',')) {
+    const [limitRaw, ...attrs] = segment.split(';').map((part) => part.trim());
+    const limit = Number(limitRaw);
+    if (!Number.isFinite(limit)) continue;
+
+    const windowAttr = attrs.find((attr) => attr.startsWith('window='));
+    const windowRaw = windowAttr?.split('=')[1];
+    const parsedWindow = windowRaw === undefined ? undefined : Number(windowRaw);
+    const rateLimitWindow: RateLimitWindow = { limit };
+    if (parsedWindow !== undefined && Number.isFinite(parsedWindow)) {
+      rateLimitWindow.windowSeconds = parsedWindow;
+    }
+    windows.push(rateLimitWindow);
+  }
+  return windows;
 }
+
 export function parseRateLimitHeaders(headers: Headers): RateLimitState {
   const remainingRaw = headers.get('RateLimit-Remaining');
-  const remaining = remainingRaw ? Number(remainingRaw) : undefined;
-  return {
-    windows: parseRateLimitLimit(headers.get('RateLimit-Limit')),
-    remaining: Number.isFinite(remaining) ? remaining : undefined,
-  };
+  const remaining = remainingRaw === null ? undefined : Number(remainingRaw);
+  const state: RateLimitState = { windows: parseRateLimitLimit(headers.get('RateLimit-Limit')) };
+  if (remaining !== undefined && Number.isFinite(remaining)) {
+    state.remaining = remaining;
+  }
+  return state;
 }
 export function calculateAdaptiveDelay(
   baseMs: number,

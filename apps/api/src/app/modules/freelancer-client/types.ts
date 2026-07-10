@@ -1,3 +1,5 @@
+export type KnownProjectType = 'fixed' | 'hourly';
+
 export interface FreelancerJob {
   id: number;
   name: string;
@@ -7,22 +9,22 @@ export interface FreelancerJob {
 export interface FreelancerProject {
   id: number;
   title: string;
-  preview_description?: string | undefined;
-  description?: string | undefined;
-  type: 'fixed' | 'hourly' | string;
-  status?: string | undefined;
-  frontend_project_status?: string | undefined;
-  deleted?: boolean | undefined;
+  preview_description?: string;
+  description?: string;
+  type?: string;
+  status?: string;
+  frontend_project_status?: string;
+  deleted?: boolean;
   submitdate?: number;
   time_submitted?: number;
   time_updated?: number;
   seo_url?: string;
-  language?: string | undefined;
-  local?: boolean | undefined;
+  language?: string;
+  local?: boolean;
   urgent?: boolean;
   featured?: boolean;
-  currency?: { code?: string } | undefined;
-  budget?: { minimum?: number; maximum?: number } | undefined;
+  currency?: { code?: string };
+  budget?: { minimum?: number; maximum?: number };
   bid_stats?: { bid_count?: number; bid_avg?: number };
   jobs?: FreelancerJob[];
   upgrades?: Record<string, unknown>;
@@ -34,30 +36,30 @@ export interface FreelancerProject {
 export interface NormalizedProjectJob {
   id: number;
   name: string;
-  seoUrl?: string | undefined;
+  seoUrl?: string;
 }
 
 export interface NormalizedProject {
   id: number;
   title: string;
-  previewDescription?: string | undefined;
-  description?: string | undefined;
-  type: 'fixed' | 'hourly' | string;
-  status?: string | undefined;
-  frontendProjectStatus?: string | undefined;
-  deleted?: boolean | undefined;
-  timeSubmitted?: number | undefined;
-  timeUpdated?: number | undefined;
-  seoUrl?: string | undefined;
-  language?: string | undefined;
-  local?: boolean | undefined;
-  currency?: { code?: string } | undefined;
-  budget?: { minimum?: number; maximum?: number } | undefined;
-  bidStats?: { bidCount?: number | undefined; bidAvg?: number | undefined } | undefined;
+  previewDescription?: string;
+  description?: string;
+  type: KnownProjectType;
+  status?: string;
+  frontendProjectStatus?: string;
+  deleted?: boolean;
+  timeSubmitted?: number;
+  timeUpdated?: number;
+  seoUrl?: string;
+  language?: string;
+  local?: boolean;
+  currency?: { code?: string };
+  budget?: { minimum?: number; maximum?: number };
+  bidStats?: { bidCount?: number; bidAvg?: number };
   jobs: NormalizedProjectJob[];
-  clientCountry?: string | undefined;
-  clientCountryCode?: string | undefined;
-  ownerId?: number | undefined;
+  clientCountry?: string;
+  clientCountryCode?: string;
+  ownerId?: number;
 }
 
 export interface ProjectSearchParams {

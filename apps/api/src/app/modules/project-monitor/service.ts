@@ -1,4 +1,5 @@
-import { DEFAULT_POLL_INTERVAL_SECONDS } from '@fbs/shared';
+import { DEFAULT_POLL_INTERVAL_SECONDS, type ProjectType } from '@fbs/shared';
+import type { Types } from 'mongoose';
 import { logger } from '../../config/logger.js';
 import { env } from '../../config/env.js';
 import { FreelancerClient } from '../freelancer-client/client.js';
@@ -6,6 +7,52 @@ import { DetectedProjectModel } from '../detected-project/model.js';
 import { activeProfile } from '../search-profile/service.js';
 import { createSkipReasons, projectSkipReason } from './filter.js';
 import { PollLock } from './lock.js';
+
+import type { NormalizedProject } from '../freelancer-client/types.js';
+import type { SearchProfileDocument } from '../search-profile/model.js';
+
+interface DetectedProjectCreateInput {
+  freelancerProjectId: number;
+  searchProfileId: Types.ObjectId;
+  title: string;
+  descriptionPreview?: string;
+  projectType: ProjectType;
+  currency?: string;
+  budgetMinimum?: number;
+  budgetMaximum?: number;
+  bidCount?: number;
+  averageBid?: number;
+  jobs: Array<{ id: number; name: string }>;
+  clientCountry?: string;
+  seoUrl: string;
+  timeSubmitted?: Date;
+  timeUpdated?: Date;
+}
+
+export function buildDetectedProjectCreatePayload(
+  profile: SearchProfileDocument,
+  project: NormalizedProject,
+): DetectedProjectCreateInput {
+  const payload: DetectedProjectCreateInput = {
+    freelancerProjectId: project.id,
+    searchProfileId: profile._id,
+    title: project.title,
+    projectType: project.type,
+    jobs: project.jobs,
+    seoUrl: project.seoUrl ?? String(project.id),
+  };
+  const clientCountry = project.clientCountry ?? project.clientCountryCode;
+  if (clientCountry !== undefined) payload.clientCountry = clientCountry;
+  if (project.previewDescription !== undefined) payload.descriptionPreview = project.previewDescription;
+  if (project.currency?.code !== undefined) payload.currency = project.currency.code;
+  if (project.budget?.minimum !== undefined) payload.budgetMinimum = project.budget.minimum;
+  if (project.budget?.maximum !== undefined) payload.budgetMaximum = project.budget.maximum;
+  if (project.bidStats?.bidCount !== undefined) payload.bidCount = project.bidStats.bidCount;
+  if (project.bidStats?.bidAvg !== undefined) payload.averageBid = project.bidStats.bidAvg;
+  if (project.timeSubmitted !== undefined) payload.timeSubmitted = new Date(project.timeSubmitted * 1000);
+  if (project.timeUpdated !== undefined) payload.timeUpdated = new Date(project.timeUpdated * 1000);
+  return payload;
+}
 
 export interface MonitorRuntime {
   running: boolean;
@@ -96,26 +143,7 @@ export class ProjectMonitor {
           }
           matched++;
           try {
-            await DetectedProjectModel.create({
-              freelancerProjectId: project.id,
-              searchProfileId: profile._id,
-              title: project.title,
-              descriptionPreview: project.previewDescription,
-              projectType: project.type === 'hourly' ? 'hourly' : 'fixed',
-              currency: project.currency?.code,
-              budgetMinimum: project.budget?.minimum,
-              budgetMaximum: project.budget?.maximum,
-              bidCount: project.bidStats?.bidCount,
-              averageBid: project.bidStats?.bidAvg,
-              jobs: project.jobs,
-              clientCountry: project.clientCountry ?? project.clientCountryCode,
-              seoUrl: project.seoUrl ?? String(project.id),
-              timeSubmitted: project.timeSubmitted
-                ? new Date(project.timeSubmitted * 1000)
-                : undefined,
-              timeUpdated: project.timeUpdated ? new Date(project.timeUpdated * 1000) : undefined,
-              rawSnapshot: undefined,
-            });
+            await DetectedProjectModel.create(buildDetectedProjectCreatePayload(profile, project));
             newCount++;
           } catch (e) {
             if (typeof e === 'object' && e && 'code' in e && e.code === 11000) {
