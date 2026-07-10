@@ -6,12 +6,12 @@ Private local-first monitor for Freelancer.com projects. Phase 1 validates a Per
 Freelancer API → local Node/Express API at `127.0.0.1:4300` → MongoDB persistence/deduplication → Chrome extension popup/service worker/offscreen audio. The extension only calls local routes and never receives the Freelancer token.
 
 ## Prerequisites
-Node.js 22+, pnpm, MongoDB, Chrome.
+Node.js 22+, npm 10.13.1, MongoDB, Chrome.
 
 ## Setup
-1. `corepack enable && corepack prepare pnpm@10.13.1 --activate`
+1. Install Node.js 22+ with npm 10.13.1.
 2. `npm install`
-3. Copy `.env.example` to `.env` and fill values.
+3. Copy `.env.example` to `.env` at the repository root and fill values. Optionally, `apps/api/.env` can override root values for the API workspace only.
 4. Start MongoDB locally or provide `MONGODB_URI`.
 5. Generate a Freelancer Personal Access Token in Freelancer account settings/developer API settings. Tokens expire after 30 days; set `FREELANCER_TOKEN_EXPIRES_AT`.
 6. Start backend: `npm run dev:api`.
