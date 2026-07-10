@@ -1,5 +1,5 @@
 import { Schema, model, type InferSchemaType } from 'mongoose';
-import { DEFAULT_POLL_INTERVAL_SECONDS } from '@fbs/shared';
+import { DEFAULT_MAXIMUM_PROJECT_AGE_MINUTES, DEFAULT_POLL_INTERVAL_SECONDS } from '@fbs/shared';
 const schema = new Schema(
   {
     name: { type: String, required: true },
@@ -19,6 +19,7 @@ const schema = new Schema(
     notificationEnabled: { type: Boolean, default: true },
     soundEnabled: { type: Boolean, default: true },
     allowLocalProjects: { type: Boolean, default: false },
+    maximumProjectAgeMinutes: { type: Number, default: DEFAULT_MAXIMUM_PROJECT_AGE_MINUTES, min: 1, max: 1440 },
   },
   { timestamps: true },
 );

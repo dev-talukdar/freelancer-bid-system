@@ -5,6 +5,7 @@ export type SkipReason =
   | 'invalidShape'
   | 'deleted'
   | 'notOpen'
+  | 'tooOld'
   | 'localProject'
   | 'keywordMismatch'
   | 'excludedKeyword'
@@ -18,6 +19,7 @@ export const createSkipReasons = (): Record<SkipReason, number> => ({
   invalidShape: 0,
   deleted: 0,
   notOpen: 0,
+  tooOld: 0,
   localProject: 0,
   keywordMismatch: 0,
   excludedKeyword: 0,
@@ -36,9 +38,21 @@ export function isProjectOpen(project: NormalizedProject): boolean {
   return project.status === 'active';
 }
 
+export function projectSubmissionDate(project: NormalizedProject): Date | undefined {
+  if (typeof project.timeSubmitted !== 'number' || !Number.isFinite(project.timeSubmitted) || project.timeSubmitted <= 0) return undefined;
+  const submittedAt = new Date(project.timeSubmitted * 1000);
+  if (Number.isNaN(submittedAt.getTime())) return undefined;
+  return submittedAt;
+}
+
 export function projectSkipReason(profile: SearchProfileDocument, project: NormalizedProject): SkipReason | undefined {
+  const submittedAt = projectSubmissionDate(project);
+  if (submittedAt === undefined) return 'invalidShape';
   if (project.deleted === true) return 'deleted';
   if (!isProjectOpen(project)) return 'notOpen';
+  const maximumAgeMinutes = profile.maximumProjectAgeMinutes ?? 10;
+  const maximumAgeMs = maximumAgeMinutes * 60 * 1000;
+  if (Date.now() - submittedAt.getTime() > maximumAgeMs) return 'tooOld';
   if (project.local === true && !profile.allowLocalProjects) return 'localProject';
 
   const matchesProjectType = profile.projectTypes.length === 0 || profile.projectTypes.includes(project.type as 'fixed' | 'hourly');
@@ -49,12 +63,12 @@ export function projectSkipReason(profile: SearchProfileDocument, project: Norma
     .join(' ')
     .toLowerCase();
 
+  const excludedKeywordMatch = (profile.excludedKeywords as string[]).some((keyword) => searchableText.includes(normalized(keyword)));
+  if (excludedKeywordMatch) return 'excludedKeyword';
+
   const keywordMatch =
     profile.keywords.length === 0 || (profile.keywords as string[]).some((keyword) => searchableText.includes(normalized(keyword)));
   if (!keywordMatch) return 'keywordMismatch';
-
-  const excludedKeywordMatch = (profile.excludedKeywords as string[]).some((keyword) => searchableText.includes(normalized(keyword)));
-  if (excludedKeywordMatch) return 'excludedKeyword';
 
   const matchesJobs = profile.jobIds.length === 0 || project.jobs.some((job) => profile.jobIds.includes(job.id));
   if (!matchesJobs) return 'jobMismatch';
