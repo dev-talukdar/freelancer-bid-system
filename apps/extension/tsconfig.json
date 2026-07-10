@@ -1,0 +1,1 @@
+{"extends":"../../packages/tsconfig/base.json","compilerOptions":{"module":"ESNext","moduleResolution":"Bundler","jsx":"react-jsx","outDir":"dist","rootDir":"src","composite":true,"types":["chrome","vite/client"]},"references":[{"path":"../../packages/shared"}],"include":["src/**/*.ts","src/**/*.tsx"]}
