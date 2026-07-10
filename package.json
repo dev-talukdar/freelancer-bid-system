@@ -28,6 +28,7 @@
   "devDependencies": {
     "@eslint/js": "latest",
     "@types/node": "latest",
+    "concurrently": "^10.0.3",
     "eslint": "latest",
     "eslint-config-prettier": "latest",
     "eslint-plugin-react-hooks": "latest",
@@ -37,8 +38,7 @@
     "prettier": "latest",
     "typescript": "latest",
     "typescript-eslint": "latest",
-    "vitest": "latest",
-    "concurrently": "latest"
+    "vitest": "latest"
   },
   "lint-staged": {
     "*.{ts,tsx,js,json,md,css}": [
