@@ -1,0 +1,1 @@
+{"name":"@fbs/shared","version":"0.1.0","type":"module","exports":{".":"./dist/index.js"},"scripts":{"build":"tsc -b","typecheck":"tsc -b --noEmit","test":"vitest run","test:watch":"vitest"},"dependencies":{"zod":"latest"},"devDependencies":{"typescript":"latest","vitest":"latest"}}
