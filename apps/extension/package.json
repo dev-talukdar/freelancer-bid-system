@@ -4,8 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "tsc -b --force && vite build && node scripts/copy-manifest.mjs",
-    "typecheck": "tsc -b --force",
+    "build": "tsc -b --force tsconfig.json tsconfig.node.json && vite build && node scripts/copy-manifest.mjs",
+    "typecheck": "tsc -b --force tsconfig.json tsconfig.node.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint ."
