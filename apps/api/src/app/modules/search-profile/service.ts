@@ -1,5 +1,3 @@
- 
-
 import { searchProfileSchema, type SearchProfileInput } from '@fbs/shared';
 
 import { SearchProfileModel } from './model.js';
@@ -215,10 +213,10 @@ export const seedSearchProfile = async (): Promise<void> => {
       projectTypes: ['fixed', 'hourly'],
       minimumFixedBudget: 250,
       maximumFixedBudget: null,
-      minimumHourlyRate: 30,
+      minimumHourlyRate: 25,
       maximumHourlyRate: null,
       pollIntervalSeconds: 30,
-      maximumProjectAgeMinutes: 10,
+      maximumProjectAgeMinutes: 60, // we can change here duration of project posted time.
       notificationEnabled: true,
       soundEnabled: true,
       allowLocalProjects: false,

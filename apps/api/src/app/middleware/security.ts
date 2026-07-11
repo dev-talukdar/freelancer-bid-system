@@ -15,11 +15,22 @@ export const requestId: RequestHandler = (_req, res, next) => {
 
 export const securityHeaders = helmet();
 
-const allowedOrigins = new Set([
-  `chrome-extension://${env.EXTENSION_ID}`,
-  'http://127.0.0.1:4300',
-  'http://localhost:4300',
-]);
+const normalizeExtensionOrigin = (extensionIdOrOrigin: string) => {
+  const trimmed = extensionIdOrOrigin.trim().replace(/\/+$/, '');
+  return trimmed.startsWith('chrome-extension://') ? trimmed : `chrome-extension://${trimmed}`;
+};
+
+export const buildAllowedOrigins = (extensionIdOrOrigin?: string) => {
+  const origins = new Set(['http://127.0.0.1:4300', 'http://localhost:4300']);
+
+  if (extensionIdOrOrigin?.trim()) {
+    origins.add(normalizeExtensionOrigin(extensionIdOrOrigin));
+  }
+
+  return origins;
+};
+
+const allowedOrigins = buildAllowedOrigins(env.EXTENSION_ID);
 
 export const corsMiddleware = cors({
   origin(origin, callback) {
