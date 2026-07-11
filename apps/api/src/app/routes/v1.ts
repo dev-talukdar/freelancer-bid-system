@@ -8,7 +8,18 @@ import {
   updateProfile,
   activateProfile,
 } from '../modules/search-profile/service.js';
-import { listDetected, markOpened, markRead } from '../modules/detected-project/service.js';
+import {
+  listDetected,
+  listUnnotified,
+  markNotified,
+  markOpened,
+  markRead,
+} from '../modules/detected-project/service.js';
+import {
+  detectedProjectsQuerySchema,
+  objectIdParamSchema,
+  unnotifiedProjectsQuerySchema,
+} from '../modules/detected-project/validation.js';
 import { monitor } from '../modules/project-monitor/service.js';
 import { DetectedProjectModel } from '../modules/detected-project/model.js';
 
@@ -85,20 +96,47 @@ v1Router.post('/monitor/poll', async (_req, res, next) => {
     next(e);
   }
 });
-v1Router.get('/detected-projects', async (req, res) =>
-  ok(
-    res,
-    'Detected projects loaded',
-    await listDetected(
-      Number(req.query.page ?? 1),
-      Number(req.query.pageSize ?? 20),
-      req.query.unreadOnly === 'true',
-    ),
-  ),
-);
-v1Router.patch('/detected-projects/:id/read', async (req, res) =>
-  ok(res, 'Detected project marked read', await markRead(req.params.id)),
-);
-v1Router.post('/detected-projects/:id/opened', async (req, res) =>
-  ok(res, 'Detected project marked opened', await markOpened(req.params.id)),
-);
+v1Router.get('/detected-projects', async (req, res, next) => {
+  try {
+    const query = detectedProjectsQuerySchema.parse(req.query);
+    ok(
+      res,
+      'Detected projects loaded',
+      await listDetected(query.page, query.pageSize, query.unreadOnly),
+    );
+  } catch (e) {
+    next(e);
+  }
+});
+v1Router.get('/detected-projects/unnotified', async (req, res, next) => {
+  try {
+    const query = unnotifiedProjectsQuerySchema.parse(req.query);
+    ok(res, 'Unnotified detected projects loaded', await listUnnotified(query.limit));
+  } catch (e) {
+    next(e);
+  }
+});
+v1Router.patch('/detected-projects/:id/notified', async (req, res, next) => {
+  try {
+    const params = objectIdParamSchema.parse(req.params);
+    ok(res, 'Detected project marked notified', await markNotified(params.id));
+  } catch (e) {
+    next(e);
+  }
+});
+v1Router.patch('/detected-projects/:id/read', async (req, res, next) => {
+  try {
+    const params = objectIdParamSchema.parse(req.params);
+    ok(res, 'Detected project marked read', await markRead(params.id));
+  } catch (e) {
+    next(e);
+  }
+});
+v1Router.patch('/detected-projects/:id/opened', async (req, res, next) => {
+  try {
+    const params = objectIdParamSchema.parse(req.params);
+    ok(res, 'Detected project marked opened', await markOpened(params.id));
+  } catch (e) {
+    next(e);
+  }
+});

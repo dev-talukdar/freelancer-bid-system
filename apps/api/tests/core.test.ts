@@ -3,6 +3,11 @@ import { normalizeFreelancerSeoUrl } from '@fbs/shared';
 import { Types } from 'mongoose';
 import { buildFreelancerQuery } from '../src/app/modules/freelancer-client/query.js';
 import {
+  detectedProjectsQuerySchema,
+  objectIdParamSchema,
+  unnotifiedProjectsQuerySchema,
+} from '../src/app/modules/detected-project/validation.js';
+import {
   calculateAdaptiveDelay,
   parseRateLimitHeaders,
   parseRateLimitLimit,
@@ -71,7 +76,15 @@ const realisticProject = {
 const objectIdProfile = { ...activeProfile, _id: new Types.ObjectId() } as SearchProfileDocument;
 
 describe('api foundations', () => {
-  it('serializes repeated array query parameters', () => {
+  it('serializes repeated array query parameters and preserves newest-first monitor sort parameters', () => {
+    const monitorQs = buildFreelancerQuery({
+      sort_field: 'time_updated',
+      reverse_sort: false,
+      limit: 50,
+    });
+    expect(monitorQs.get('sort_field')).toBe('time_updated');
+    expect(monitorQs.get('reverse_sort')).toBe('false');
+
     const qs = buildFreelancerQuery({ jobs: [9, 500], countries: ['us', 'ca'], compact: true });
     expect(qs.toString()).toContain('jobs%5B%5D=9');
     expect(qs.getAll('jobs[]')).toEqual(['9', '500']);
@@ -128,6 +141,16 @@ describe('api foundations', () => {
     const err = mapFreelancerError(429, { message: 'slow down' }, 'rid');
     expect(err.errorCode).toBe('FREELANCER_RATE_LIMITED');
     expect(err.freelancerRequestId).toBe('rid');
+  });
+
+  it('validates detected project route parameters and query limits', () => {
+    expect(objectIdParamSchema.safeParse({ id: new Types.ObjectId().toString() }).success).toBe(
+      true,
+    );
+    expect(objectIdParamSchema.safeParse({ id: 'bad-id' }).success).toBe(false);
+    expect(unnotifiedProjectsQuerySchema.parse({ limit: '50' }).limit).toBe(50);
+    expect(unnotifiedProjectsQuerySchema.safeParse({ limit: '51' }).success).toBe(false);
+    expect(detectedProjectsQuerySchema.parse({ unreadOnly: 'true' }).unreadOnly).toBe(true);
   });
 });
 

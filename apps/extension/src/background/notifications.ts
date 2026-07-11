@@ -18,7 +18,7 @@ export function buildNotificationMessage(project: DetectedProjectDto): string {
 }
 
 export async function createProjectNotification(project: DetectedProjectDto): Promise<void> {
-  await chrome.notifications.create(`project:${project.id}`, {
+  await chrome.notifications.create(`detected-project:${project.id}`, {
     type: 'basic',
     iconUrl: chrome.runtime.getURL('icons/icon128.png'),
     title: project.title,
