@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { normalizeFreelancerSeoUrl } from '@fbs/shared';
 import { Types } from 'mongoose';
 import { buildFreelancerQuery } from '../src/app/modules/freelancer-client/query.js';
@@ -24,9 +24,16 @@ import { PollLock } from '../src/app/modules/project-monitor/lock.js';
 import { mapFreelancerError } from '../src/app/error/app-error.js';
 import { realisticFreelancerActiveProjectResponse } from './fixtures/freelancer-active-project-response.js';
 import type { NormalizedProject } from '../src/app/modules/freelancer-client/types.js';
-import { buildSearchProfileCreatePayload } from '../src/app/modules/search-profile/service.js';
+import {
+  TARGET_SKILL_IDS,
+  buildSearchProfileCreatePayload,
+  syncActiveProfileTargetSkillIds,
+} from '../src/app/modules/search-profile/service.js';
 import { buildDetectedProjectCreatePayload } from '../src/app/modules/project-monitor/service.js';
-import type { SearchProfileDocument } from '../src/app/modules/search-profile/model.js';
+import {
+  SearchProfileModel,
+  type SearchProfileDocument,
+} from '../src/app/modules/search-profile/model.js';
 
 const activeProfile: ProjectFilterProfile = {
   keywords: ['react'],
@@ -317,12 +324,154 @@ describe('freelancer project normalization and matching', () => {
     expect(projectSkipReason(profile, { ...realisticProject, title })).toBe('excludedKeyword');
   });
 
+  it('accepts project when one configured skill ID matches', () => {
+    expect(
+      projectMatches(
+        { ...activeProfile, keywords: ['nonmatching'], jobIds: [500] },
+        {
+          ...realisticProject,
+          title: 'Unrelated',
+          previewDescription: 'Unrelated',
+          jobs: [{ id: 500, name: 'Node.js' }],
+        },
+      ),
+    ).toBe(true);
+  });
+
+  it('accepts project when skill ID misses but keyword matches title', () => {
+    expect(
+      projectMatches(
+        { ...activeProfile, keywords: ['dashboard'], jobIds: [500] },
+        { ...realisticProject, title: 'Dashboard build', jobs: [{ id: 1, name: 'Other' }] },
+      ),
+    ).toBe(true);
+  });
+
+  it('accepts project when skill ID misses but keyword matches description', () => {
+    expect(
+      projectMatches(
+        { ...activeProfile, keywords: ['client portal'], jobIds: [500] },
+        {
+          ...realisticProject,
+          title: 'Unrelated',
+          previewDescription: 'Unrelated',
+          description: 'Build a client portal',
+          jobs: [{ id: 1, name: 'Other' }],
+        },
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects project when neither skill ID nor keyword matches', () => {
+    expect(
+      projectSkipReason(
+        { ...activeProfile, keywords: ['dashboard'], jobIds: [500] },
+        {
+          ...realisticProject,
+          title: 'Mobile app',
+          previewDescription: 'Native mobile work',
+          description: 'Swift project',
+          jobs: [{ id: 1, name: 'iOS' }],
+        },
+      ),
+    ).toBe('jobMismatch');
+  });
+
+  it('excluded keyword rejects even when skill ID matches', () => {
+    expect(
+      projectSkipReason(
+        { ...activeProfile, keywords: [], excludedKeywords: ['casino'], jobIds: [500] },
+        { ...realisticProject, title: 'Casino dashboard', jobs: [{ id: 500, name: 'Node.js' }] },
+      ),
+    ).toBe('excludedKeyword');
+  });
+
+  it('empty jobIds and empty keywords do not block relevance', () => {
+    expect(
+      projectMatches(
+        { ...activeProfile, keywords: [], jobIds: [] },
+        {
+          ...realisticProject,
+          title: 'Unrelated',
+          previewDescription: 'No configured relevance filters',
+        },
+      ),
+    ).toBe(true);
+  });
+
+  it('accepts multiple project skills with one matching ID', () => {
+    expect(
+      projectMatches(
+        { ...activeProfile, keywords: ['nonmatching'], jobIds: [979] },
+        {
+          ...realisticProject,
+          title: 'Unrelated',
+          previewDescription: 'Unrelated',
+          jobs: [
+            { id: 1, name: 'Other' },
+            { id: 979, name: 'TypeScript' },
+          ],
+        },
+      ),
+    ).toBe(true);
+  });
+
+  it('normalizes skill names for keyword fallback', () => {
+    expect(
+      projectMatches(
+        { ...activeProfile, keywords: ['Next JS'], jobIds: [500] },
+        {
+          ...realisticProject,
+          title: 'Unrelated',
+          previewDescription: 'Unrelated',
+          jobs: [{ id: 1, name: 'Next.js' }],
+        },
+      ),
+    ).toBe(true);
+  });
+
+  it('continues applying filters after relevance matching', () => {
+    expect(
+      projectSkipReason(
+        { ...activeProfile, keywords: [], jobIds: [500], currencies: ['EUR'] },
+        { ...realisticProject, jobs: [{ id: 500, name: 'Node.js' }] },
+      ),
+    ).toBe('currencyMismatch');
+  });
+
   it('passes the mocked realistic React project through the matcher', () => {
     expect(projectMatches(activeProfile, realisticProject)).toBe(true);
   });
 });
 
 describe('mongoose payload builders', () => {
+  it('seeds configured target skill IDs into new profiles', () => {
+    const payload = buildSearchProfileCreatePayload({
+      name: 'Target skills',
+      jobIds: [...TARGET_SKILL_IDS],
+    });
+    expect(payload.jobIds).toEqual([...TARGET_SKILL_IDS]);
+  });
+
+  it('existing active profile receives the configured skill IDs safely', async () => {
+    const select = vi.fn().mockReturnValue({
+      lean: vi.fn().mockResolvedValue({ _id: new Types.ObjectId(), jobIds: [] }),
+    });
+    const findOne = vi.spyOn(SearchProfileModel, 'findOne').mockReturnValue({ select } as never);
+    const updateOne = vi
+      .spyOn(SearchProfileModel, 'updateOne')
+      .mockResolvedValue({ modifiedCount: 1 } as never);
+
+    await expect(syncActiveProfileTargetSkillIds()).resolves.toBe(true);
+    expect(findOne).toHaveBeenCalledWith({ enabled: true });
+    expect(updateOne).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }), {
+      $set: { jobIds: [...TARGET_SKILL_IDS] },
+    });
+
+    findOne.mockRestore();
+    updateOne.mockRestore();
+  });
+
   it('omits undefined optional search profile values while preserving null and numbers', () => {
     const omitted = buildSearchProfileCreatePayload({ name: 'Omitted' });
     expect(Object.hasOwn(omitted, 'maximumBidCount')).toBe(false);

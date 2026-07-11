@@ -1,5 +1,6 @@
 import type { SearchProfileDocument } from '../search-profile/model.js';
 import type { NormalizedProject } from '../freelancer-client/types.js';
+import { logger } from '../../config/logger.js';
 
 export type SkipReason =
   | 'invalidShape'
@@ -56,7 +57,18 @@ export type ProjectFilterProfile = Pick<
   | 'maximumHourlyRate'
 >;
 
-const normalized = (value: string) => value.trim().toLowerCase();
+export const normalize = (value: string): string =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/\./g, '')
+    .replace(/[-_/]+/g, ' ')
+    .replace(/\s+/g, ' ');
+
+const normalized = normalize;
+const compact = (value: string): string => value.replace(/\s+/g, '');
+const includesNormalized = (source: string, normalizedNeedle: string): boolean =>
+  source.includes(normalizedNeedle) || compact(source).includes(compact(normalizedNeedle));
 const isDefinedNumber = (value: number | null | undefined): value is number =>
   typeof value === 'number' && Number.isFinite(value);
 
@@ -95,29 +107,56 @@ export function projectSkipReason(
     profile.projectTypes.length === 0 || profile.projectTypes.includes(project.type);
   if (!matchesProjectType) return 'projectTypeMismatch';
 
-  const searchableText = [
-    project.title,
-    project.previewDescription,
-    project.description,
-    ...project.jobs.map((job) => job.name),
-  ]
+  const projectText = [project.title, project.previewDescription, project.description]
     .filter((value): value is string => typeof value === 'string')
-    .join(' ')
-    .toLowerCase();
+    .map(normalize)
+    .join(' ');
+  const projectSkillIds = project.jobs.map((job) => job.id);
+  const projectSkillNames = project.jobs.map((job) => normalize(job.name));
 
-  const excludedKeywordMatch = profile.excludedKeywords.some((keyword) =>
-    searchableText.includes(normalized(keyword)),
-  );
+  const excludedKeywordMatch = profile.excludedKeywords.some((keyword) => {
+    const normalizedKeyword = normalize(keyword);
+
+    return (
+      includesNormalized(projectText, normalizedKeyword) ||
+      projectSkillNames.some((skillName) => includesNormalized(skillName, normalizedKeyword))
+    );
+  });
   if (excludedKeywordMatch) return 'excludedKeyword';
 
-  const keywordMatch =
-    profile.keywords.length === 0 ||
-    profile.keywords.some((keyword) => searchableText.includes(normalized(keyword)));
-  if (!keywordMatch) return 'keywordMismatch';
+  const hasJobFilters = profile.jobIds.length > 0;
+  const jobMatch =
+    !hasJobFilters || projectSkillIds.some((jobId) => profile.jobIds.includes(jobId));
 
-  const matchesJobs =
-    profile.jobIds.length === 0 || project.jobs.some((job) => profile.jobIds.includes(job.id));
-  if (!matchesJobs) return 'jobMismatch';
+  const hasKeywordFilters = profile.keywords.length > 0;
+  const keywordMatch =
+    !hasKeywordFilters ||
+    profile.keywords.some((keyword) => {
+      const normalizedKeyword = normalize(keyword);
+
+      return (
+        includesNormalized(projectText, normalizedKeyword) ||
+        projectSkillNames.some((skillName) => includesNormalized(skillName, normalizedKeyword))
+      );
+    });
+
+  const relevanceMatch = (!hasJobFilters && !hasKeywordFilters) || jobMatch || keywordMatch;
+  if (!relevanceMatch) {
+    logger.debug(
+      {
+        projectId: project.id,
+        title: project.title,
+        projectSkillIds,
+        projectSkillNames: project.jobs.map((job) => job.name),
+        configuredJobIds: profile.jobIds,
+        keywordMatch,
+        jobMatch,
+        reason: 'jobMismatch',
+      },
+      'freelancer project rejected for relevance',
+    );
+    return 'jobMismatch';
+  }
 
   const profileCountries = profile.countries.map(normalized);
   const clientCountry = project.clientCountryCode ?? project.clientCountry;
