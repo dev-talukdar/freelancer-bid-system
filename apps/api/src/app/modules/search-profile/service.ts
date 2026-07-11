@@ -26,6 +26,46 @@ interface SearchProfileCreatePayload {
 
 type SearchProfileUpdatePayload = Partial<SearchProfileCreatePayload>;
 
+export const TARGET_SKILL_IDS = [
+  9, // JavaScript
+  335, // HTML
+  500, // Node.js
+  1088, // Full Stack Development
+  1827, // Website Build
+  2839, // Website Development
+  1031, // Web Development
+  759, // React.js
+  1092, // Backend Development
+  1093, // Frontend Development
+  2376, // Next.js
+  2382, // Web Application
+  979, // TypeScript
+] as const;
+
+const targetSkillIds = (): number[] => [...TARGET_SKILL_IDS];
+
+const sameNumberArray = (left: number[], right: readonly number[]): boolean =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
+
+export const syncActiveProfileTargetSkillIds = async (): Promise<boolean> => {
+  const activeProfile = await SearchProfileModel.findOne({ enabled: true }).select('jobIds').lean();
+
+  if (!activeProfile || sameNumberArray(activeProfile.jobIds, TARGET_SKILL_IDS)) {
+    return false;
+  }
+
+  const result = await SearchProfileModel.updateOne(
+    { _id: activeProfile._id, enabled: true },
+    {
+      $set: {
+        jobIds: targetSkillIds(),
+      },
+    },
+  );
+
+  return result.modifiedCount > 0;
+};
+
 export const buildSearchProfileCreatePayload = (input: unknown): SearchProfileCreatePayload => {
   const parsed = searchProfileSchema.parse(input);
 
@@ -145,6 +185,7 @@ export const seedSearchProfile = async (): Promise<void> => {
   const existingProfile = await SearchProfileModel.exists({});
 
   if (existingProfile) {
+    await syncActiveProfileTargetSkillIds();
     return;
   }
 
@@ -180,7 +221,7 @@ export const seedSearchProfile = async (): Promise<void> => {
         'academic',
         'homework',
       ],
-      jobIds: [],
+      jobIds: targetSkillIds(),
       countries: [
         'us',
         'ca',
