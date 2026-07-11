@@ -32,7 +32,7 @@ describe('extension foundations', () => {
     );
   });
   it('deduplicates notification ids', () => {
-    expect(shouldNotify([7], 7)).toBe(false);
-    expect(shouldNotify([], 7)).toBe(true);
+    expect(shouldNotify(['mongo'], 'mongo')).toBe(false);
+    expect(shouldNotify([], 'mongo')).toBe(true);
   });
 });

@@ -76,6 +76,7 @@ export class ProjectMonitor {
   start() {
     if (this.state.running) return;
     this.state.running = true;
+    logger.info({ intervalSeconds: this.state.currentPollingIntervalSeconds }, 'monitor started');
     void this.poll();
   }
 
@@ -83,10 +84,15 @@ export class ProjectMonitor {
     this.state.running = false;
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;
+    logger.info('monitor stopped');
   }
 
   private schedule() {
     if (!this.state.running) return;
+    logger.debug(
+      { intervalSeconds: this.state.currentPollingIntervalSeconds },
+      'monitor next poll scheduled',
+    );
     this.timer = setTimeout(
       () => void this.poll(),
       this.state.currentPollingIntervalSeconds * 1000,
@@ -98,9 +104,18 @@ export class ProjectMonitor {
       const started = Date.now();
       const skipReasons = createSkipReasons();
       try {
+        logger.info('monitor poll started');
         const profile = await getActiveProfile();
-        if (!profile) return { returned: 0, matched: 0, new: 0, skipped: 0, skipReasons };
+        if (!profile) {
+          logger.warn(
+            { durationMs: Date.now() - started },
+            'monitor poll skipped: no active profile',
+          );
+          return { returned: 0, matched: 0, new: 0, skipped: 0, skipReasons };
+        }
         this.state.currentPollingIntervalSeconds = Math.max(20, profile.pollIntervalSeconds);
+        // Freelancer active-project search uses reverse_sort=false with sort_field=time_updated to request
+        // the most recently updated projects first; preserve this so the monitor sees fresh projects.
         const projects = await this.client.activeProjects({
           project_types: profile.projectTypes,
           jobs: profile.jobIds,
@@ -168,9 +183,11 @@ export class ProjectMonitor {
             returned: projects.length,
             matched,
             new: newCount,
+            duplicatesSkipped: skipReasons.duplicate,
             skipped,
             skipReasons,
             durationMs: Date.now() - started,
+            nextPollIntervalSeconds: this.state.currentPollingIntervalSeconds,
             rateLimit: this.client.rateLimitState,
           },
           'poll complete',
@@ -178,7 +195,14 @@ export class ProjectMonitor {
         return { returned: projects.length, matched, new: newCount, skipped, skipReasons };
       } catch (e) {
         this.state.lastPollingError = e instanceof Error ? e.message : 'Unknown polling error';
-        logger.error({ err: e }, 'poll failed');
+        logger.error(
+          {
+            err: e,
+            durationMs: Date.now() - started,
+            nextPollIntervalSeconds: this.state.currentPollingIntervalSeconds,
+          },
+          'poll failed',
+        );
         throw e;
       } finally {
         this.schedule();

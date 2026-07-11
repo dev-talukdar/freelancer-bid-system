@@ -1,1 +1,6 @@
-export function shouldNotify(previouslyNotified: readonly number[], freelancerProjectId: number): boolean { return !previouslyNotified.includes(freelancerProjectId); }
+export function shouldNotify(
+  previouslyNotified: readonly string[],
+  detectedProjectId: string,
+): boolean {
+  return !previouslyNotified.includes(detectedProjectId);
+}

@@ -106,6 +106,15 @@ export interface PaginatedDetectedProjectsDto {
   pageSize: number;
   unreadCount: number;
 }
+export interface NotificationSettingsDto {
+  enabled: boolean;
+  soundEnabled: boolean;
+}
+export interface UnnotifiedDetectedProjectsDto {
+  items: DetectedProjectDto[];
+  notification: NotificationSettingsDto;
+  limit: number;
+}
 export function normalizeFreelancerSeoUrl(input: string): string {
   const cleaned = input
     .trim()
