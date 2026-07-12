@@ -7,7 +7,7 @@ import { DetectedProjectModel } from '../detected-project/model.js';
 import { createSkipReasons, projectSkipReason } from './filter.js';
 import { PollLock } from './lock.js';
 
-import type { NormalizedProject } from '../freelancer-client/types.js';
+import type { NormalizedProject, ProjectSearchParams } from '../freelancer-client/types.js';
 import type { SearchProfileDocument } from '../search-profile/model.js';
 import { getActiveProfile } from '../search-profile/service.js';
 
@@ -54,6 +54,22 @@ export function buildDetectedProjectCreatePayload(
     payload.timeSubmitted = new Date(project.timeSubmitted * 1000);
   if (project.timeUpdated !== undefined) payload.timeUpdated = new Date(project.timeUpdated * 1000);
   return payload;
+}
+
+export function buildMonitorSearchParams(profile: SearchProfileDocument): ProjectSearchParams {
+  return {
+    project_types: profile.projectTypes,
+    sort_field: 'time_updated',
+    reverse_sort: false,
+    limit: 100,
+    compact: true,
+    full_description: true,
+    job_details: true,
+    user_details: true,
+    user_country_details: true,
+    user_display_info: true,
+    user_employer_reputation: true,
+  };
 }
 
 export interface MonitorRuntime {
@@ -113,25 +129,16 @@ export class ProjectMonitor {
           );
           return { returned: 0, matched: 0, new: 0, skipped: 0, skipReasons };
         }
-        this.state.currentPollingIntervalSeconds = Math.max(20, profile.pollIntervalSeconds);
-        // Freelancer active-project search uses reverse_sort=false with sort_field=time_updated to request
-        // the most recently updated projects first; preserve this so the monitor sees fresh projects.
-        const projects = await this.client.activeProjects({
-          project_types: profile.projectTypes,
-          jobs: profile.jobIds,
-          countries: profile.countries,
-          languages: profile.languages,
-          sort_field: 'time_updated',
-          reverse_sort: false,
-          limit: 50,
-          compact: true,
-          full_description: true,
-          job_details: true,
-          user_details: true,
-          user_country_details: true,
-          user_display_info: true,
-          user_employer_reputation: true,
-        });
+        this.state.currentPollingIntervalSeconds = Math.max(
+          20,
+          profile.pollIntervalSeconds ?? DEFAULT_POLL_INTERVAL_SECONDS,
+        );
+        // Fetch a broad newest-first window, then apply all profile filters locally. Passing job,
+        // country, or language filters to Freelancer can hide valid keyword matches before our matcher
+        // sees them (for example website-development or QA projects whose skill IDs are not in our
+        // configured web-development job list).
+        const projects = await this.client.activeProjects(buildMonitorSearchParams(profile));
+
         if (env.NODE_ENV === 'development' && projects[0])
           logger.debug({ project: projects[0] }, 'first normalized freelancer project sample');
         let matched = 0;

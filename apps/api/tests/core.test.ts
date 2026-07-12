@@ -29,7 +29,10 @@ import {
   buildSearchProfileCreatePayload,
   syncActiveProfileTargetSkillIds,
 } from '../src/app/modules/search-profile/service.js';
-import { buildDetectedProjectCreatePayload } from '../src/app/modules/project-monitor/service.js';
+import {
+  buildDetectedProjectCreatePayload,
+  buildMonitorSearchParams,
+} from '../src/app/modules/project-monitor/service.js';
 import {
   SearchProfileModel,
   type SearchProfileDocument,
@@ -83,18 +86,21 @@ const realisticProject = {
 const objectIdProfile = { ...activeProfile, _id: new Types.ObjectId() } as SearchProfileDocument;
 
 describe('api foundations', () => {
-  it('serializes repeated array query parameters and preserves newest-first monitor sort parameters', () => {
-    const monitorQs = buildFreelancerQuery({
-      sort_field: 'time_updated',
-      reverse_sort: false,
-      limit: 50,
-    });
-    expect(monitorQs.get('sort_field')).toBe('time_updated');
-    expect(monitorQs.get('reverse_sort')).toBe('false');
-
+  it('serializes repeated array query parameters', () => {
     const qs = buildFreelancerQuery({ jobs: [9, 500], countries: ['us', 'ca'], compact: true });
     expect(qs.toString()).toContain('jobs%5B%5D=9');
     expect(qs.getAll('jobs[]')).toEqual(['9', '500']);
+  });
+
+  it('keeps monitor searches broad so local keyword matching can catch valid projects', () => {
+    const params = buildMonitorSearchParams(objectIdProfile);
+    const monitorQs = buildFreelancerQuery(params);
+    expect(monitorQs.get('sort_field')).toBe('time_updated');
+    expect(monitorQs.get('reverse_sort')).toBe('false');
+    expect(monitorQs.get('limit')).toBe('100');
+    expect(params.jobs).toBeUndefined();
+    expect(params.countries).toBeUndefined();
+    expect(params.languages).toBeUndefined();
   });
 
   it('parses rate limit headers and adapts delay', () => {
