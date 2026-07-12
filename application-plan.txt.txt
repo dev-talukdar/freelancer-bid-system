@@ -1,110 +1,852 @@
-Final application plan
+Act as a Senior Backend Architect and Chrome Extension Integration Engineer with deep experience in Node.js, Express.js, TypeScript, MongoDB/Mongoose, Freelancer API integrations, polling systems, API pagination, Chrome Extension Manifest V3, and production-grade debugging.
 
-# Phase 1 — Personal token and alerts
------------------------------
-Personal Access Token settings
-/self token validation
-Active-project polling
-Skill, country, language and budget filters
-20–30 second polling
-Rate-limit header parsing
-Deduplication
-Chrome popup
-Browser notification
-Alert sound
-Open project action
+This is the final attempt to make my Freelancer project notification system fully functional.
 
-# Phase 2 — Proposal assistant
------------------------------
-Full project details
-Technical match score
-Project risk detection
-Proposal draft
-Suggested amount
-Suggested delivery period
-Portfolio matching
-Manual editing
+Do not make speculative changes. Diagnose the real runtime path first, then implement the smallest correct fix.
 
-# Phase 3 — Controlled bid submission
------------------------------
-Confirm personal token supports fln:project_manage
-Check existing bid remotely
-Validate project is still open
-Validate required skills
-Submit only after explicit approval
-Store bid ID and request ID
-Support bid updates and retraction
-# Phase 4 — Optional guarded automatic mode
------------------------------
+## System objective
 
-Only after controlled submission has been tested reliably:
+The application must do this:
 
-Daily bid cap
-Minimum match score
-Maximum competing bids
-Allowed countries
-Minimum budget
-Excluded keywords
-Duplicate prevention
-Emergency kill switch
+```text
+Freelancer publishes a new project
+→ backend polls Freelancer API
+→ project skills match my configured Freelancer skill IDs
+→ currency matches
+→ client country matches
+→ language/project type/budget filters match
+→ project is inserted into detectedprojects
+→ extension fetches it from /unnotified
+→ Chrome notification appears
+→ sound plays when enabled
+→ notifiedAt is saved
+Confirmed working parts
 
+The following flow has already been proven with a manually inserted MongoDB test document:
 
+Detected project exists without notifiedAt
+→ GET /api/v1/detected-projects/unnotified returns it
+→ extension fetches it
+→ Chrome notification flow runs
+→ backend marks notifiedAt
+→ next unnotified request returns items: []
 
+The extension is connected to:
 
-skills with code: 
-----------
-export const TARGET_SKILL_IDS = [
-  9, // JavaScript
-  335, // HTML
-  500, // Node.js
+http://127.0.0.1:4300
+
+The extension:
+
+has a valid local API key;
+polls every 30 seconds;
+receives successful API responses;
+calls the unnotified endpoint;
+has notifications enabled;
+has sound enabled.
+
+Therefore, do not rewrite the extension unless runtime evidence proves an extension-specific defect.
+
+Current failure
+
+Real Freelancer projects never reach the notification queue.
+
+Typical poll result:
+
+{
+  "returned": 32,
+  "matched": 0,
+  "new": 0,
+  "skipped": 32,
+  "skipReasons": {
+    "notOpen": 14,
+    "tooOld": 18
+  }
+}
+
+Another observed result:
+
+{
+  "returned": 37,
+  "matched": 0,
+  "new": 0,
+  "skipped": 37,
+  "skipReasons": {
+    "tooOld": 1,
+    "localProject": 1,
+    "excludedKeyword": 2,
+    "jobMismatch": 27,
+    "countryMismatch": 6
+  }
+}
+
+This means:
+
+Freelancer API returns projects
+→ every project is rejected locally
+→ nothing is inserted
+→ /unnotified returns []
+→ no notification can appear
+Working Freelancer website search
+
+The Freelancer website itself shows recent matching projects using filters equivalent to:
+
+projectSkills=9,335,500,1088,1827,2839,1031,759,1092,1093,2376,2382,979
+projectLanguages=en
+clientCountries=tw,hk,nz,il,sa,nl,gr,es,it,ie,sg,pt,se,ch,pl,be,fr,de,gb,au,ca,us
+sort=latest
+
+A visible qualifying project can contain:
+
+Status: Open
+Country: United Kingdom
+Currency: GBP
+Budget: £250–£750
+Skills:
+- HTML
+- Web Development
+- Backend Development
+- Frontend Development
+
+These match configured skill IDs:
+
+const TARGET_SKILL_IDS = [
+  9,    // JavaScript
+  335,  // HTML
+  500,  // Node.js
   1088, // Full Stack Development
   1827, // Website Build
   2839, // Website Development
   1031, // Web Development
-  759, // React.js
+  759,  // React.js
   1092, // Backend Development
   1093, // Frontend Development
   2376, // Next.js
   2382, // Web Application
-  979, // TypeScript
+  979,  // TypeScript
 ] as const;
-----------
-countries: 
-----------
-  ['tw', 'taiwan'],
-  ['hk', 'hong kong'],
-  ['nz', 'new zealand'],
-  ['il', 'israel'],
-  ['sa', 'saudi arabia'],
-  ['nl', 'netherlands', 'the netherlands', 'holland'],
-  ['gr', 'greece'],
-  ['es', 'spain'],
-  ['it', 'italy'],
-  ['ie', 'ireland'],
-  ['sg', 'singapore'],
-  ['pt', 'portugal'],
-  ['se', 'sweden'],
-  ['ch', 'switzerland'],
-  ['pl', 'poland'],
-  ['be', 'belgium'],
-  ['fr', 'france'],
-  ['de', 'germany'],
-  ['gb', 'united kingdom', 'uk', 'u k', 'great britain', 'england'],
-  ['au', 'australia'],
-  ['ca', 'canada'],
-  ['us', 'united states', 'united states of america', 'usa', 'u s a', 'america'],
-  -----------------
-  currencies:
-  -----------------
-  currencies: ['USD', 'NZD', 'AUD', 'GBP', 'HKD', 'SGD', 'EUR', 'CAD'],
-  -----------------
-  i can work on any budget project as long as country, currency and 1 skills atleast  match
-  -----------------
-  Maximum project age you can about  12 hours 
-  -----------------
-  high bid count can be 300
-  -----------------
-  I don't want to use any keyword include or exclude. My extension bring project for me as long a  country, currency and 1 skills  matched atleast
-  -----------------
-  -----------------
-  -----------------
+
+The backend should retrieve and detect the same category of projects.
+
+Current backend request
+
+The monitor currently builds a broad request similar to:
+
+export function buildMonitorSearchParams(
+  profile: SearchProfileDocument,
+): ProjectSearchParams {
+  return {
+    project_types: profile.projectTypes,
+    sort_field: 'time_updated',
+    reverse_sort: true,
+    limit: 100,
+    compact: true,
+    full_description: true,
+    job_details: true,
+    user_details: true,
+    user_country_details: true,
+    user_display_info: true,
+    user_employer_reputation: true,
+  };
+}
+
+It does not currently send:
+
+jobs: profile.jobIds
+countries: profile.countries
+languages: profile.languages
+from_time
+
+The current code fetches broadly and applies filters locally.
+
+Primary task
+
+Determine why the API request does not reliably return the same fresh matching projects visible in the Freelancer website search.
+
+Implement a reliable production flow that returns fresh projects matching:
+
+configured Freelancer skill IDs;
+configured countries;
+configured currencies;
+configured languages;
+fixed/hourly project types;
+budget/rate constraints;
+project-age window;
+local-project policy;
+excluded keywords.
+
+Do not claim success until a real Freelancer project produces:
+
+matched > 0
+new > 0
+
+and reaches the extension notification queue.
+
+
+# Phase 1: verify repository and runtime build
+
+Before editing anything, confirm:
+
+pwd
+git rev-parse --show-toplevel
+git branch --show-current
+git status
+
+Confirm this is the Freelancer bid monitoring repository, not another project.
+
+Inspect package scripts and determine:
+
+which backend source file is actually running;
+which extension build directory Chrome loads;
+whether the current runtime reflects current source code;
+whether stale dist files are being used.
+
+Do not modify the wrong repository.
+
+
+# Phase 2: inspect the complete real implementation
+
+Inspect:
+
+apps/api/src/app/modules/project-monitor/service.ts
+apps/api/src/app/modules/project-monitor/filter.ts
+apps/api/src/app/modules/project-monitor/lock.ts
+
+apps/api/src/app/modules/freelancer-client/client.ts
+apps/api/src/app/modules/freelancer-client/query.ts
+apps/api/src/app/modules/freelancer-client/normalize.ts
+apps/api/src/app/modules/freelancer-client/types.ts
+
+apps/api/src/app/modules/search-profile/model.ts
+apps/api/src/app/modules/search-profile/service.ts
+
+apps/api/src/app/modules/detected-project/*
+apps/api/src/app/routes/*
+apps/api/src/server.ts
+apps/api/src/app/config/env.ts
+
+apps/extension/src/background/service-worker.ts
+apps/extension/src/background/notifications.ts
+apps/extension/src/services/local-api.ts
+apps/extension/src/storage/settings.ts
+apps/extension/manifest.json
+
+Do not create duplicate modules.
+
+
+# Phase 3: inspect the actual active MongoDB profile
+
+Read the active profile used at runtime.
+
+Confirm actual values and types for:
+
+{
+  enabled,
+  jobIds,
+  keywords,
+  excludedKeywords,
+  countries,
+  currencies,
+  languages,
+  projectTypes,
+  maximumProjectAgeMinutes,
+  maximumBidCount,
+  minimumFixedBudget,
+  maximumFixedBudget,
+  minimumHourlyRate,
+  maximumHourlyRate,
+  allowLocalProjects,
+  notificationEnabled,
+  soundEnabled,
+  pollIntervalSeconds
+}
+
+Do not assume changes to seed code updated the existing database document.
+
+Confirm:
+
+jobIds
+
+contains numbers, not strings.
+
+Correct:
+
+[9, 335, 500]
+
+Incorrect:
+
+["9", "335", "500"]
+
+# Phase 4: add a development-only diagnostic endpoint
+
+Add a protected development-only endpoint:
+
+GET /api/v1/project-monitor/debug/projects
+
+Requirements:
+
+only available when NODE_ENV === 'development';
+protected by the existing local API key middleware;
+no Freelancer access token or local API secret in output;
+no full sensitive descriptions;
+no private client data beyond fields needed for diagnostics.
+
+It must call the same Freelancer client and use the same query-building path as the actual monitor.
+
+Return:
+
+interface ProjectDiagnostic {
+  id: number;
+  title: string;
+  status?: string;
+  frontendProjectStatus?: string;
+  deleted?: boolean;
+
+  submittedAt?: string;
+  updatedAt?: string;
+  submittedAgeMinutes?: number;
+  updatedAgeMinutes?: number;
+
+  skills: Array<{
+    id: number;
+    name: string;
+  }>;
+
+  country?: string;
+  countryCode?: string;
+  currency?: string;
+  language?: string;
+  projectType: 'fixed' | 'hourly';
+
+  budgetMinimum?: number;
+  budgetMaximum?: number;
+  bidCount?: number;
+
+  skipReason: string | null;
+}
+
+Response structure:
+
+{
+  "success": true,
+  "data": {
+    "request": {
+      "query": {},
+      "profile": {}
+    },
+    "returned": 0,
+    "projects": []
+  }
+}
+
+This endpoint must make it possible to answer:
+
+Was the project returned by Freelancer?
+What status did Freelancer return?
+What timestamps did Freelancer return?
+What skill IDs did Freelancer return?
+What client country did Freelancer return?
+What filter rejected it?
+
+# Phase 5: exact-project diagnostic
+
+Keep or improve support for:
+
+DEBUG_FREELANCER_PROJECT_ID=
+
+When configured, log:
+
+{
+  projectId,
+  fetched: boolean,
+  skipReason?: string,
+  normalizedProject?: {
+    id,
+    title,
+    status,
+    frontendProjectStatus,
+    submittedAt,
+    updatedAt,
+    submittedAgeMinutes,
+    skills,
+    country,
+    currency,
+    language,
+    projectType,
+    budget,
+    bidCount
+  }
+}
+
+The diagnostic must distinguish:
+
+project not returned by Freelancer
+project returned but rejected locally
+project accepted but duplicate
+project inserted as new detection
+
+Do not log tokens or secrets.
+
+
+# Phase 6: verify Freelancer query semantics
+
+Inspect the actual final URL query parameters generated by:
+
+buildFreelancerQuery()
+
+Safely log only pathname and query parameters.
+
+Verify whether the Freelancer endpoint expects:
+
+jobs[]=9
+countries[]=gb
+languages[]=en
+project_types[]=fixed
+
+or another serialization format.
+
+Do not assume array syntax without checking current API behavior or repository evidence.
+
+Add tests proving:
+
+reverse_sort: false
+
+is serialized and not omitted.
+
+Verify:
+
+from_time
+limit
+offset
+sort_field
+reverse_sort
+
+are serialized correctly.
+
+
+# Phase 7: make API retrieval match the intended search
+
+Test a request shaped like the working website filters:
+
+{
+  project_types: profile.projectTypes,
+  jobs: profile.jobIds,
+  countries: profile.countries,
+  languages: profile.languages,
+  from_time: calculatedFromTime,
+  sort_field: confirmedNewestField,
+  reverse_sort: confirmedNewestDirection,
+  limit: pageSize,
+  offset: 0,
+  compact: true,
+  full_description: true,
+  job_details: true,
+  user_details: true,
+  location_details: true,
+  user_country_details: true,
+  user_display_info: true,
+  user_employer_reputation: true,
+}
+
+Calculate from_time in Unix seconds:
+
+const maximumAgeMinutes =
+  profile.maximumProjectAgeMinutes ?? 10;
+
+const fromTime = Math.floor(
+  (Date.now() - maximumAgeMinutes * 60_000) / 1000,
+);
+
+Keep local age filtering as defense in depth.
+
+Do not rely only on from_time.
+
+Sorting
+
+The system detects newly posted projects, so sorting and age should primarily use submission time.
+
+Investigate whether the API accepts:
+
+sort_field: 'time_submitted'
+
+or requires another documented value.
+
+Do not blindly use time_updated.
+
+Test the observed order.
+
+The first project returned must be newer than the last project returned.
+
+Document the confirmed final semantics.
+
+
+# Phase 8: use submission time for new-project freshness
+
+Current logic may use the latest of submission/update time.
+
+That is incorrect for:
+
+Notify me when a new project is posted
+
+Use:
+
+export function projectFreshnessDate(
+  project: NormalizedProject,
+): Date | undefined {
+  return (
+    projectSubmissionDate(project) ??
+    projectUpdatedDate(project)
+  );
+}
+
+Submission time must be primary.
+
+Update time should only be a fallback when submission time is missing.
+
+Do not treat an old project edited recently as newly posted.
+
+Add tests for:
+
+new submission;
+old submission with recent update;
+missing submission with valid update;
+invalid timestamps.
+
+# Phase 9: fix relevance matching semantics
+
+Current logic may define empty filters as automatically matched:
+
+const jobMatch = !hasJobFilters || ...
+const keywordMatch = !hasKeywordFilters || ...
+
+This creates incorrect OR behavior.
+
+Use:
+
+const hasJobFilters = profile.jobIds.length > 0;
+const hasKeywordFilters = profile.keywords.length > 0;
+
+const jobMatch =
+  hasJobFilters &&
+  project.jobs.some((job) =>
+    profile.jobIds.includes(job.id),
+  );
+
+const keywordMatch =
+  hasKeywordFilters &&
+  profile.keywords.some((keyword) => {
+    // normalized title/description/skill-name fallback
+  });
+
+const relevanceMatch =
+  (!hasJobFilters && !hasKeywordFilters) ||
+  jobMatch ||
+  keywordMatch;
+
+if (!relevanceMatch) {
+  return 'jobMismatch';
+}
+
+Required matching policy:
+
+excluded keyword rejection
+AND
+(skill-ID match OR keyword fallback)
+AND
+all other configured filters
+
+Structured Freelancer skill IDs are the primary match path.
+
+Keywords are fallback only.
+
+
+# Phase 10: correctly resolve client country
+
+The monitor requests:
+
+user_details: true
+user_country_details: true
+
+Inspect the actual Freelancer response shape.
+
+Determine whether country appears:
+
+project.location.country
+
+or in a separate returned users map keyed by owner_id.
+
+If the response contains a separate user map, the client must not discard it.
+
+Enrich normalized projects using the owner’s returned user details.
+
+Conceptually:
+
+const ownerId = project.owner_id ?? project.owner?.id;
+const owner = ownerId
+  ? users[String(ownerId)]
+  : undefined;
+
+const country =
+  project.location?.country ??
+  owner?.location?.country;
+
+Update types safely.
+
+Do not invent a response shape. Inspect runtime response keys first.
+
+Add tests for:
+
+country directly on project;
+country from owner/user map;
+country code aliases;
+missing country;
+country mismatch.
+
+# Phase 11: pagination
+
+The client supports:
+
+limit
+offset
+
+but the monitor currently fetches one result window.
+
+Determine the actual endpoint limit and returned count.
+
+If needed, implement bounded pagination.
+
+Requirements:
+
+maximum 3–5 pages per poll
+respect Freelancer rate limits
+stop on empty page
+stop when fewer than page size returned
+deduplicate projects by Freelancer project ID
+do not fetch unlimited historical projects
+
+When sorted newest-first, stop once the oldest submitted project in a page is outside the configured age window.
+
+Do not add pagination unless runtime evidence shows a recent expected project is absent from the first page.
+
+
+# Phase 12: scheduler reliability
+
+The popup has previously shown:
+
+Monitoring: Running
+Interval: 30s
+Next poll: already in the past
+
+Inspect the polling scheduler and PollLock.
+
+Ensure:
+
+only one timer exists;
+manual poll does not kill automatic scheduling;
+overlapping polls are skipped safely rather than breaking the timer chain;
+scheduled poll failures do not permanently stop future polls;
+running accurately reflects scheduler state;
+last and next poll timestamps update correctly.
+
+Do not allow an overlap error to prevent the next poll from being scheduled.
+
+
+# Phase 13: notification queue caching
+
+The extension network has shown 304 responses for the unnotified endpoint.
+
+For notification queue reads, configure no-store behavior.
+
+Extension request:
+
+fetch(url, {
+  cache: 'no-store',
+  headers: {
+    Accept: 'application/json',
+    'X-Local-API-Key': secret,
+    'Cache-Control': 'no-cache',
+  },
+});
+
+Backend response:
+
+Cache-Control: no-store, no-cache, must-revalidate
+
+This is a reliability improvement, not the primary root cause.
+
+Do not change the notification lifecycle semantics.
+
+
+# Phase 14: preserve the working extension flow
+
+The correct extension sequence is:
+
+poll /unnotified
+→ create Chrome notification
+→ mark notified
+→ save durable dedupe ID
+→ optionally play sound
+
+Do not mark a project notified before:
+
+chrome.notifications.create()
+
+succeeds.
+
+Do not rewrite this flow unless tests fail.
+
+Required tests
+
+Add or update tests for:
+
+Freelancer query
+array serialization;
+Boolean serialization;
+from_time;
+limit and offset;
+confirmed sort field/direction.
+Normalization
+seconds timestamps;
+milliseconds timestamps;
+status normalization;
+project skills;
+project country;
+owner/user-map country fallback.
+Filtering
+skill-ID match accepted;
+keyword fallback accepted;
+neither skill nor keyword rejected;
+excluded keyword always rejected;
+country accepted through aliases;
+currency match;
+language match;
+submission freshness;
+old submission with recent update remains old;
+open/active status;
+closed/deleted rejection.
+Monitor
+real matching fixture creates detected record;
+duplicate is skipped;
+bounded pagination;
+automatic polling survives manual-poll overlap;
+failed poll still schedules next poll;
+no active profile behavior.
+Extension
+unnotified item creates one notification;
+failed notification is not marked notified;
+successful notification is marked notified;
+sound failure does not block visual notification;
+no-store API request behavior.
+
+Mock external API and Chrome APIs in automated tests.
+
+Do not call the real Freelancer API in unit tests.
+
+Required manual integration test
+
+After implementation:
+
+Start MongoDB.
+Start backend.
+Confirm the monitor starts.
+Confirm automatic polls continue every configured interval.
+Open the debug endpoint.
+Confirm it returns current Freelancer projects.
+Pick one recent project visible on Freelancer.com.
+Set its ID as DEBUG_FREELANCER_PROJECT_ID.
+Run Poll now.
+
+Confirm:
+
+fetched: true
+Confirm its skipReason.
+
+If it should match, confirm:
+
+skipReason: null
+matched > 0
+new > 0
+Confirm MongoDB contains the detected project without notifiedAt.
+Confirm /unnotified returns it.
+Confirm Chrome notification appears.
+Confirm sound plays when enabled.
+Confirm backend sets notifiedAt.
+Click notification.
+Confirm correct Freelancer URL opens.
+Confirm readAt and openedAt are set.
+Required verification commands
+
+Run:
+
+npm run typecheck
+npm run lint
+npm test
+npm run build
+
+Fix all introduced errors.
+
+Do not disable lint rules broadly.
+
+Do not use unsafe casts to hide implementation problems.
+
+Required final report
+
+Provide:
+
+Confirmed root cause
+
+Only include causes proven by code and runtime evidence.
+
+Do not present guesses as facts.
+
+Freelancer request
+
+Show the final sanitized query parameters.
+
+Exact project trace
+
+Show:
+
+project ID
+fetched or not
+normalized skills
+country
+currency
+submitted time
+skip reason
+inserted or duplicate
+Before and after metrics
+
+Use actual values:
+
+Before:
+returned 32
+matched 0
+new 0
+
+After:
+returned ...
+matched ...
+new ...
+Files changed
+
+List every file changed and why.
+
+Final flow
+
+Document the complete working path from Freelancer API to Chrome notification.
+
+Remaining limitations
+
+State actual API indexing delays, rate limits, polling cadence limits, or pagination caps.
+
+Non-negotiable constraints
+Do not replace the real Freelancer client with a stub.
+Do not modify another repository.
+Do not create duplicate modules.
+Do not weaken API-key security.
+Do not remove local validation.
+Do not accept closed or deleted projects.
+Do not mark notifications delivered before Chrome creates them.
+Do not claim success based only on tests.
+Do not claim success while matched = 0 and new = 0.
+Diagnose first, then implement the smallest correct fix.

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/require-await */
 import { searchProfileSchema, type SearchProfileInput } from '@fbs/shared';
 
 import { SearchProfileModel } from './model.js';
