@@ -1,3 +1,4 @@
+ 
 import { DEFAULT_POLL_INTERVAL_SECONDS, type ProjectType } from '@fbs/shared';
 import type { Types } from 'mongoose';
 import { logger } from '../../config/logger.js';
@@ -123,14 +124,8 @@ export function buildDetectedProjectCreatePayload(
 }
 
 export function buildMonitorSearchParams(profile: SearchProfileDocument): ProjectSearchParams {
-  const maximumAgeMinutes = profile.maximumProjectAgeMinutes ?? 10;
-  const fromTime = Math.floor((Date.now() - maximumAgeMinutes * 60_000) / 1000);
-
   return {
     project_types: profile.projectTypes,
-    from_time: fromTime,
-    sort_field: 'time_updated',
-    // Freelancer active-project search returns newest projects first when reverse_sort=true for time_updated.
     reverse_sort: true,
     limit: 100,
     compact: true,

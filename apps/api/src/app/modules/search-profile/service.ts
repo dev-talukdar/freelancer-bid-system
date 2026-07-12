@@ -77,7 +77,10 @@ const sameStringArray = (left: string[], right: readonly string[]): boolean =>
 
 export const syncActiveProfileTargetSkillIds = async (): Promise<boolean> => {
   const activeProfile = await SearchProfileModel.findOne({ enabled: true })
-    .select('jobIds countries maximumProjectAgeMinutes maximumBidCount')
+    .select(
+      'keywords excludedKeywords jobIds countries languages minimumFixedBudget minimumHourlyRate maximumProjectAgeMinutes maximumBidCount',
+    )
+
     .lean();
 
   if (!activeProfile) return false;
@@ -85,9 +88,25 @@ export const syncActiveProfileTargetSkillIds = async (): Promise<boolean> => {
   const $set: Partial<
     Pick<
       SearchProfileCreatePayload,
-      'jobIds' | 'countries' | 'maximumProjectAgeMinutes' | 'maximumBidCount'
+      | 'keywords'
+      | 'excludedKeywords'
+      | 'jobIds'
+      | 'countries'
+      | 'languages'
+      | 'minimumFixedBudget'
+      | 'minimumHourlyRate'
+      | 'maximumProjectAgeMinutes'
+      | 'maximumBidCount'
     >
   > = {};
+
+  if (activeProfile.keywords.length > 0) {
+    $set.keywords = [];
+  }
+
+  if (activeProfile.excludedKeywords.length > 0) {
+    $set.excludedKeywords = [];
+  }
 
   if (!sameNumberArray(activeProfile.jobIds, TARGET_SKILL_IDS)) {
     $set.jobIds = targetSkillIds();
@@ -97,12 +116,24 @@ export const syncActiveProfileTargetSkillIds = async (): Promise<boolean> => {
     $set.countries = targetCountryCodes();
   }
 
-  if ((activeProfile.maximumProjectAgeMinutes ?? 0) < 60) {
-    $set.maximumProjectAgeMinutes = 60;
+  if (activeProfile.languages.length > 0) {
+    $set.languages = [];
   }
 
-  if (activeProfile.maximumBidCount !== null) {
-    $set.maximumBidCount = null;
+  if ((activeProfile.maximumProjectAgeMinutes ?? 0) < 720) {
+    $set.maximumProjectAgeMinutes = 720;
+  }
+
+  if (activeProfile.minimumFixedBudget !== null) {
+    $set.minimumFixedBudget = null;
+  }
+
+  if (activeProfile.minimumHourlyRate !== null) {
+    $set.minimumHourlyRate = null;
+  }
+
+  if (activeProfile.maximumBidCount !== 300) {
+    $set.maximumBidCount = 300;
   }
 
   const result = await SearchProfileModel.updateOne(
@@ -240,45 +271,20 @@ export const seedSearchProfile = async (): Promise<void> => {
     buildSearchProfileCreatePayload({
       name: 'Web development monitoring',
       enabled: true,
-      keywords: [
-        'javascript',
-        'typescript',
-        'node.js',
-        'express.js',
-        'mongodb',
-        'react',
-        'next.js',
-        'full stack development',
-        'website build',
-        'website development',
-        'web application',
-        'saas',
-        'dashboard',
-        'admin panel',
-        'client portal',
-      ],
-      excludedKeywords: [
-        'casino',
-        'gambling',
-        'crypto casino',
-        'betting',
-        'slot',
-        'slots',
-        'adult',
-        'academic',
-        'homework',
-      ],
+      // Detection is skill/country/currency based; keywords are intentionally disabled.
+      keywords: [],
+      excludedKeywords: [],
       jobIds: targetSkillIds(),
       countries: targetCountryCodes(),
       currencies: ['USD', 'NZD', 'AUD', 'GBP', 'HKD', 'SGD', 'EUR', 'CAD'],
       languages: ['en'],
       projectTypes: ['fixed', 'hourly'],
-      minimumFixedBudget: 250,
+      minimumFixedBudget: null,
       maximumFixedBudget: null,
-      minimumHourlyRate: 25,
+      minimumHourlyRate: null,
       maximumHourlyRate: null,
       pollIntervalSeconds: 30,
-      maximumProjectAgeMinutes: 60, // we can change here duration of project posted time.
+      maximumProjectAgeMinutes: 720, // we can change here duration of project posted time.
       notificationEnabled: true,
       soundEnabled: true,
       allowLocalProjects: false,
