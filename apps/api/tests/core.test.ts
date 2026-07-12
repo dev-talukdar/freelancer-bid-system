@@ -12,7 +12,11 @@ import {
   parseRateLimitHeaders,
   parseRateLimitLimit,
 } from '../src/app/modules/freelancer-client/rate-limit.js';
-import { normalizeFreelancerProject } from '../src/app/modules/freelancer-client/normalize.js';
+import {
+  normalizeFreelancerProject,
+  normalizeOptionalText,
+  normalizeUnixTimestamp,
+} from '../src/app/modules/freelancer-client/normalize.js';
 import {
   createSkipReasons,
   isProjectOpen,
@@ -23,6 +27,7 @@ import {
 import { PollLock } from '../src/app/modules/project-monitor/lock.js';
 import { mapFreelancerError } from '../src/app/error/app-error.js';
 import { realisticFreelancerActiveProjectResponse } from './fixtures/freelancer-active-project-response.js';
+import { FreelancerClient } from '../src/app/modules/freelancer-client/client.js';
 import type { NormalizedProject } from '../src/app/modules/freelancer-client/types.js';
 import {
   TARGET_COUNTRY_CODES,
@@ -93,12 +98,19 @@ describe('api foundations', () => {
     expect(qs.getAll('jobs[]')).toEqual(['9', '500']);
   });
 
+  it('preserves boolean false and serializes from_time', () => {
+    const qs = buildFreelancerQuery({ reverse_sort: false, from_time: 1_720_000_000 });
+    expect(qs.get('reverse_sort')).toBe('false');
+    expect(qs.get('from_time')).toBe('1720000000');
+  });
+
   it('keeps monitor searches broad so local keyword matching can catch valid projects', () => {
     const params = buildMonitorSearchParams(objectIdProfile);
     const monitorQs = buildFreelancerQuery(params);
     expect(monitorQs.get('sort_field')).toBe('time_updated');
-    expect(monitorQs.get('reverse_sort')).toBe('false');
+    expect(monitorQs.get('reverse_sort')).toBe('true');
     expect(monitorQs.get('limit')).toBe('100');
+    expect(monitorQs.get('from_time')).toMatch(/^\d+$/);
     expect(params.jobs).toBeUndefined();
     expect(params.countries).toBeUndefined();
     expect(params.languages).toBeUndefined();
@@ -169,6 +181,17 @@ describe('api foundations', () => {
 });
 
 describe('freelancer project normalization and matching', () => {
+  it('normalizes timestamps and optional text safely', () => {
+    expect(normalizeUnixTimestamp(1_720_000_000)).toBe(1_720_000_000);
+    expect(normalizeUnixTimestamp(1_720_000_000_123)).toBe(1_720_000_000);
+    expect(normalizeUnixTimestamp(undefined)).toBeUndefined();
+    expect(normalizeUnixTimestamp(Number.NaN)).toBeUndefined();
+    expect(normalizeUnixTimestamp(0)).toBeUndefined();
+    expect(normalizeUnixTimestamp(-1)).toBeUndefined();
+    expect(normalizeOptionalText(' OPEN ')).toBe('open');
+    expect(normalizeOptionalText('   ')).toBeUndefined();
+  });
+
   it('normalizes snake_case response fields and rejects unknown project types', () => {
     expect(normalizedRealisticProject.previewDescription).toBe('Build a React admin dashboard');
     expect(normalizedRealisticProject.frontendProjectStatus).toBe('open');
@@ -206,6 +229,18 @@ describe('freelancer project normalization and matching', () => {
     expect(
       isProjectOpen({ ...realisticProject, frontendProjectStatus: 'open', status: 'closed' }),
     ).toBe(true);
+    expect(
+      isProjectOpen({ ...realisticProject, frontendProjectStatus: ' OPEN ', status: ' CLOSED ' }),
+    ).toBe(true);
+    expect(
+      isProjectOpen({ ...realisticProject, frontendProjectStatus: 'closed', status: ' ACTIVE ' }),
+    ).toBe(true);
+    expect(
+      isProjectOpen({ ...realisticProject, frontendProjectStatus: 'closed', status: 'inactive' }),
+    ).toBe(false);
+    expect(
+      isProjectOpen({ ...realisticProject, frontendProjectStatus: undefined, status: undefined }),
+    ).toBe(false);
   });
 
   it('rejects deleted and closed projects', () => {
@@ -218,7 +253,7 @@ describe('freelancer project normalization and matching', () => {
         frontendProjectStatus: 'closed',
         status: 'active',
       }),
-    ).toBe('notOpen');
+    ).toBeUndefined();
     expect(
       projectSkipReason(activeProfile, {
         ...realisticProject,
@@ -538,5 +573,74 @@ describe('mongoose payload builders', () => {
     const populated = buildDetectedProjectCreatePayload(objectIdProfile, realisticProject);
     expect(populated.currency).toBe('USD');
     expect(populated.bidCount).toBe(3);
+  });
+});
+
+describe('freelancer client pagination', () => {
+  it('stops pagination safely when a page is shorter than the requested limit', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      json: () =>
+        Promise.resolve({
+          result: {
+            projects: [
+              {
+                id: 1,
+                title: 'Fresh React project',
+                type: 'fixed',
+                status: 'active',
+                time_submitted: Math.floor(Date.now() / 1000),
+                jobs: [{ id: 759, name: 'React.js' }],
+              },
+            ],
+          },
+        }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new FreelancerClient('token', 'https://www.freelancer.com/api');
+
+    const projects = await client.activeProjects({ limit: 2, reverse_sort: false, from_time: 1 });
+
+    expect(projects).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('reverse_sort=false');
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('from_time=1');
+    vi.unstubAllGlobals();
+  });
+
+  it('uses a maximum of three active-project pages', async () => {
+    const page = (offset: number) => ({
+      ok: true,
+      headers: new Headers(),
+      json: () =>
+        Promise.resolve({
+          result: {
+            projects: [
+              {
+                id: offset + 1,
+                title: `Fresh project ${offset}`,
+                type: 'fixed',
+                status: 'active',
+                time_submitted: Math.floor(Date.now() / 1000),
+                jobs: [{ id: 759, name: 'React.js' }],
+              },
+            ],
+          },
+        }),
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(page(0))
+      .mockResolvedValueOnce(page(1))
+      .mockResolvedValueOnce(page(2));
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new FreelancerClient('token', 'https://www.freelancer.com/api');
+
+    const projects = await client.activeProjects({ limit: 1 });
+
+    expect(projects).toHaveLength(3);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    vi.unstubAllGlobals();
   });
 });
