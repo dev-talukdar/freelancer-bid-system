@@ -16,9 +16,14 @@ async function ensurePollingAlarm() {
   await chrome.alarms.create(alarmName, { periodInMinutes: 0.5 });
 }
 
+async function initializePolling() {
+  await ensurePollingAlarm();
+  await check();
+}
+
 chrome.runtime.onInstalled.addListener(() => {
-  ensurePollingAlarm().catch((error: unknown) =>
-    logAsyncError('Failed to create polling alarm', error),
+  initializePolling().catch((error: unknown) =>
+    logAsyncError('Failed to initialize notification polling', error),
   );
 });
 chrome.runtime.onStartup.addListener(() => {

@@ -236,6 +236,10 @@ describe('freelancer project normalization and matching', () => {
       isProjectOpen({ ...realisticProject, frontendProjectStatus: 'closed', status: ' ACTIVE ' }),
     ).toBe(true);
     expect(
+      isProjectOpen({ ...realisticProject, frontendProjectStatus: undefined, status: 'open' }),
+    ).toBe(true);
+
+    expect(
       isProjectOpen({ ...realisticProject, frontendProjectStatus: 'closed', status: 'inactive' }),
     ).toBe(false);
     expect(
@@ -348,8 +352,10 @@ describe('freelancer project normalization and matching', () => {
         timeSubmitted: nowSeconds - 11 * 60,
         timeUpdated: nowSeconds,
       }),
-    ).toBe('tooOld');
-    expect(projectSkipReason(profile, { ...base, timeSubmitted: undefined })).toBe('invalidShape');
+    ).toBeUndefined();
+    expect(
+      projectSkipReason(profile, { ...base, timeSubmitted: undefined, timeUpdated: undefined }),
+    ).toBe('invalidShape');
   });
 
   it('includes new skip reason diagnostics', () => {

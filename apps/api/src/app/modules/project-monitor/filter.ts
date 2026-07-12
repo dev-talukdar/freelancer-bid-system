@@ -107,36 +107,50 @@ const countryTokens = (value: string | undefined): string[] => {
 const isDefinedNumber = (value: number | null | undefined): value is number =>
   typeof value === 'number' && Number.isFinite(value);
 
+const OPEN_PROJECT_STATUSES = new Set(['active', 'open']);
+
 export function isProjectOpen(project: NormalizedProject): boolean {
   if (project.deleted === true) return false;
   const frontendStatus = project.frontendProjectStatus?.trim().toLowerCase();
   const backendStatus = project.status?.trim().toLowerCase();
-  return frontendStatus === 'open' || backendStatus === 'active';
+  return (
+    OPEN_PROJECT_STATUSES.has(frontendStatus ?? '') ||
+    OPEN_PROJECT_STATUSES.has(backendStatus ?? '')
+  );
 }
 
-export function projectSubmissionDate(project: NormalizedProject): Date | undefined {
-  if (
-    typeof project.timeSubmitted !== 'number' ||
-    !Number.isFinite(project.timeSubmitted) ||
-    project.timeSubmitted <= 0
-  )
+const projectDateFromUnixTimestamp = (timestamp: number | undefined): Date | undefined => {
+  if (typeof timestamp !== 'number' || !Number.isFinite(timestamp) || timestamp <= 0)
     return undefined;
-  const submittedAt = new Date(project.timeSubmitted * 1000);
-  if (Number.isNaN(submittedAt.getTime())) return undefined;
-  return submittedAt;
+  const date = new Date(timestamp * 1000);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return date;
+};
+
+export function projectSubmissionDate(project: NormalizedProject): Date | undefined {
+  return projectDateFromUnixTimestamp(project.timeSubmitted);
+}
+
+export function projectActivityDate(project: NormalizedProject): Date | undefined {
+  const submittedAt = projectDateFromUnixTimestamp(project.timeSubmitted);
+  const updatedAt = projectDateFromUnixTimestamp(project.timeUpdated);
+  if (submittedAt === undefined) return updatedAt;
+  if (updatedAt === undefined) return submittedAt;
+  return updatedAt > submittedAt ? updatedAt : submittedAt;
 }
 
 export function projectSkipReason(
   profile: ProjectFilterProfile,
   project: NormalizedProject,
 ): SkipReason | undefined {
-  const submittedAt = projectSubmissionDate(project);
-  if (submittedAt === undefined) return 'invalidShape';
+  const activityAt = projectActivityDate(project);
+  if (activityAt === undefined) return 'invalidShape';
+
   if (project.deleted === true) return 'deleted';
   if (!isProjectOpen(project)) return 'notOpen';
   const maximumAgeMinutes = profile.maximumProjectAgeMinutes ?? 10;
   const maximumAgeMs = maximumAgeMinutes * 60 * 1000;
-  if (Date.now() - submittedAt.getTime() > maximumAgeMs) return 'tooOld';
+  if (Date.now() - activityAt.getTime() > maximumAgeMs) return 'tooOld';
   if (project.local === true && !profile.allowLocalProjects) return 'localProject';
 
   const matchesProjectType =

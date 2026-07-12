@@ -1,5 +1,7 @@
 Final application plan
-Phase 1 — Personal token and alerts
+
+# Phase 1 — Personal token and alerts
+-----------------------------
 Personal Access Token settings
 /self token validation
 Active-project polling
@@ -11,7 +13,9 @@ Chrome popup
 Browser notification
 Alert sound
 Open project action
-Phase 2 — Proposal assistant
+
+# Phase 2 — Proposal assistant
+-----------------------------
 Full project details
 Technical match score
 Project risk detection
@@ -20,7 +24,9 @@ Suggested amount
 Suggested delivery period
 Portfolio matching
 Manual editing
-Phase 3 — Controlled bid submission
+
+# Phase 3 — Controlled bid submission
+-----------------------------
 Confirm personal token supports fln:project_manage
 Check existing bid remotely
 Validate project is still open
@@ -28,7 +34,8 @@ Validate required skills
 Submit only after explicit approval
 Store bid ID and request ID
 Support bid updates and retraction
-Phase 4 — Optional guarded automatic mode
+# Phase 4 — Optional guarded automatic mode
+-----------------------------
 
 Only after controlled submission has been tested reliably:
 
@@ -40,3 +47,64 @@ Minimum budget
 Excluded keywords
 Duplicate prevention
 Emergency kill switch
+
+
+
+
+skills with code: 
+----------
+export const TARGET_SKILL_IDS = [
+  9, // JavaScript
+  335, // HTML
+  500, // Node.js
+  1088, // Full Stack Development
+  1827, // Website Build
+  2839, // Website Development
+  1031, // Web Development
+  759, // React.js
+  1092, // Backend Development
+  1093, // Frontend Development
+  2376, // Next.js
+  2382, // Web Application
+  979, // TypeScript
+] as const;
+----------
+countries: 
+----------
+  ['tw', 'taiwan'],
+  ['hk', 'hong kong'],
+  ['nz', 'new zealand'],
+  ['il', 'israel'],
+  ['sa', 'saudi arabia'],
+  ['nl', 'netherlands', 'the netherlands', 'holland'],
+  ['gr', 'greece'],
+  ['es', 'spain'],
+  ['it', 'italy'],
+  ['ie', 'ireland'],
+  ['sg', 'singapore'],
+  ['pt', 'portugal'],
+  ['se', 'sweden'],
+  ['ch', 'switzerland'],
+  ['pl', 'poland'],
+  ['be', 'belgium'],
+  ['fr', 'france'],
+  ['de', 'germany'],
+  ['gb', 'united kingdom', 'uk', 'u k', 'great britain', 'england'],
+  ['au', 'australia'],
+  ['ca', 'canada'],
+  ['us', 'united states', 'united states of america', 'usa', 'u s a', 'america'],
+  -----------------
+  currencies:
+  -----------------
+  currencies: ['USD', 'NZD', 'AUD', 'GBP', 'HKD', 'SGD', 'EUR', 'CAD'],
+  -----------------
+  i can work on any budget project as long as country, currency and 1 skills atleast  match
+  -----------------
+  Maximum project age you can about  12 hours 
+  -----------------
+  high bid count can be 300
+  -----------------
+  I don't want to use any keyword include or exclude. My extension bring project for me as long a  country, currency and 1 skills  matched atleast
+  -----------------
+  -----------------
+  -----------------

@@ -1,11 +1,10 @@
- 
 import { DEFAULT_POLL_INTERVAL_SECONDS, type ProjectType } from '@fbs/shared';
 import type { Types } from 'mongoose';
 import { logger } from '../../config/logger.js';
 import { env } from '../../config/env.js';
 import { FreelancerClient } from '../freelancer-client/client.js';
 import { DetectedProjectModel } from '../detected-project/model.js';
-import { createSkipReasons, projectSkipReason, projectSubmissionDate } from './filter.js';
+import { createSkipReasons, projectActivityDate, projectSkipReason } from './filter.js';
 import { PollLock } from './lock.js';
 
 import type { NormalizedProject, ProjectSearchParams } from '../freelancer-client/types.js';
@@ -31,9 +30,9 @@ interface DetectedProjectCreateInput {
 }
 
 const projectAgeMinutes = (project: NormalizedProject): number | undefined => {
-  const submittedAt = projectSubmissionDate(project);
-  if (submittedAt === undefined) return undefined;
-  return Math.floor((Date.now() - submittedAt.getTime()) / 60_000);
+  const activityAt = projectActivityDate(project);
+  if (activityAt === undefined) return undefined;
+  return Math.floor((Date.now() - activityAt.getTime()) / 60_000);
 };
 
 const projectIsoDate = (timestamp: number | undefined): string | undefined =>
@@ -47,7 +46,7 @@ const normalizedProjectSummary = (profile: SearchProfileDocument, project: Norma
   deleted: project.deleted,
   submittedAt: projectIsoDate(project.timeSubmitted),
   updatedAt: projectIsoDate(project.timeUpdated),
-  ageMinutes: projectAgeMinutes(project),
+  activityAgeMinutes: projectAgeMinutes(project),
   skillIds: project.jobs.map((job) => job.id),
   skillNames: project.jobs.map((job) => job.name),
   skipReason: projectSkipReason(profile, project),
@@ -246,7 +245,7 @@ export class ProjectMonitor {
                 deleted: project.deleted,
                 submittedAt: projectIsoDate(project.timeSubmitted),
                 updatedAt: projectIsoDate(project.timeUpdated),
-                ageMinutes: projectAgeMinutes(project),
+                activityAgeMinutes: projectAgeMinutes(project),
                 maximumProjectAgeMinutes: profile.maximumProjectAgeMinutes,
                 projectSkillIds: project.jobs.map((job) => job.id),
                 projectSkillNames: project.jobs.map((job) => job.name),
