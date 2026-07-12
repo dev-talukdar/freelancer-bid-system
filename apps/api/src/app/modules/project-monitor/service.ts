@@ -123,14 +123,12 @@ export function buildDetectedProjectCreatePayload(
 }
 
 export function buildMonitorSearchParams(profile: SearchProfileDocument): ProjectSearchParams {
-  const maximumAgeMinutes = profile.maximumProjectAgeMinutes ?? 10;
-  const fromTime = Math.floor((Date.now() - maximumAgeMinutes * 60_000) / 1000);
-
   return {
     project_types: profile.projectTypes,
-    from_time: fromTime,
-    sort_field: 'time_updated',
-    // Freelancer active-project search returns newest projects first when reverse_sort=true for time_updated.
+    // Fetch the newest submitted projects and do the age check locally. Using from_time or
+    // time_updated here can hide valid newly posted projects when Freelancer returns incomplete
+    // update timestamps or when older edited projects crowd the first API pages.
+    sort_field: 'submitdate',
     reverse_sort: true,
     limit: 100,
     compact: true,

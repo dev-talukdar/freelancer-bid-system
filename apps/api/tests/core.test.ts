@@ -107,10 +107,10 @@ describe('api foundations', () => {
   it('keeps monitor searches broad so local keyword matching can catch valid projects', () => {
     const params = buildMonitorSearchParams(objectIdProfile);
     const monitorQs = buildFreelancerQuery(params);
-    expect(monitorQs.get('sort_field')).toBe('time_updated');
+    expect(monitorQs.get('sort_field')).toBe('submitdate');
     expect(monitorQs.get('reverse_sort')).toBe('true');
     expect(monitorQs.get('limit')).toBe('100');
-    expect(monitorQs.get('from_time')).toMatch(/^\d+$/);
+    expect(monitorQs.get('from_time')).toBeNull();
     expect(params.jobs).toBeUndefined();
     expect(params.countries).toBeUndefined();
     expect(params.languages).toBeUndefined();
@@ -515,6 +515,9 @@ describe('mongoose payload builders', () => {
         _id: new Types.ObjectId(),
         jobIds: [],
         countries: ['us'],
+        languages: ['en'],
+        minimumFixedBudget: 250,
+        minimumHourlyRate: 25,
         maximumProjectAgeMinutes: 10,
         maximumBidCount: 5,
       }),
@@ -527,14 +530,17 @@ describe('mongoose payload builders', () => {
     await expect(syncActiveProfileTargetSkillIds()).resolves.toBe(true);
     expect(findOne).toHaveBeenCalledWith({ enabled: true });
     expect(select).toHaveBeenCalledWith(
-      'jobIds countries maximumProjectAgeMinutes maximumBidCount',
+      'jobIds countries languages minimumFixedBudget minimumHourlyRate maximumProjectAgeMinutes maximumBidCount',
     );
 
     expect(updateOne).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }), {
       $set: {
         jobIds: [...TARGET_SKILL_IDS],
         countries: [...TARGET_COUNTRY_CODES],
-        maximumProjectAgeMinutes: 60,
+        languages: [],
+        minimumFixedBudget: null,
+        minimumHourlyRate: null,
+        maximumProjectAgeMinutes: 720,
         maximumBidCount: null,
       },
     });

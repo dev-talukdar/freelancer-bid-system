@@ -77,7 +77,9 @@ const sameStringArray = (left: string[], right: readonly string[]): boolean =>
 
 export const syncActiveProfileTargetSkillIds = async (): Promise<boolean> => {
   const activeProfile = await SearchProfileModel.findOne({ enabled: true })
-    .select('jobIds countries maximumProjectAgeMinutes maximumBidCount')
+    .select(
+      'jobIds countries languages minimumFixedBudget minimumHourlyRate maximumProjectAgeMinutes maximumBidCount',
+    )
     .lean();
 
   if (!activeProfile) return false;
@@ -85,7 +87,13 @@ export const syncActiveProfileTargetSkillIds = async (): Promise<boolean> => {
   const $set: Partial<
     Pick<
       SearchProfileCreatePayload,
-      'jobIds' | 'countries' | 'maximumProjectAgeMinutes' | 'maximumBidCount'
+      | 'jobIds'
+      | 'countries'
+      | 'languages'
+      | 'minimumFixedBudget'
+      | 'minimumHourlyRate'
+      | 'maximumProjectAgeMinutes'
+      | 'maximumBidCount'
     >
   > = {};
 
@@ -97,8 +105,20 @@ export const syncActiveProfileTargetSkillIds = async (): Promise<boolean> => {
     $set.countries = targetCountryCodes();
   }
 
-  if ((activeProfile.maximumProjectAgeMinutes ?? 0) < 60) {
-    $set.maximumProjectAgeMinutes = 60;
+  if (activeProfile.languages.length > 0) {
+    $set.languages = [];
+  }
+
+  if ((activeProfile.maximumProjectAgeMinutes ?? 0) < 720) {
+    $set.maximumProjectAgeMinutes = 720;
+  }
+
+  if (activeProfile.minimumFixedBudget !== null) {
+    $set.minimumFixedBudget = null;
+  }
+
+  if (activeProfile.minimumHourlyRate !== null) {
+    $set.minimumHourlyRate = null;
   }
 
   if (activeProfile.maximumBidCount !== null) {
@@ -271,14 +291,16 @@ export const seedSearchProfile = async (): Promise<void> => {
       jobIds: targetSkillIds(),
       countries: targetCountryCodes(),
       currencies: ['USD', 'NZD', 'AUD', 'GBP', 'HKD', 'SGD', 'EUR', 'CAD'],
-      languages: ['en'],
+      // Leave language unrestricted because Freelancer API project payloads can omit language even
+      // when the web UI displays English. A non-empty list would reject those valid projects.
+      languages: [],
       projectTypes: ['fixed', 'hourly'],
-      minimumFixedBudget: 250,
+      minimumFixedBudget: null,
       maximumFixedBudget: null,
-      minimumHourlyRate: 25,
+      minimumHourlyRate: null,
       maximumHourlyRate: null,
       pollIntervalSeconds: 30,
-      maximumProjectAgeMinutes: 60, // we can change here duration of project posted time.
+      maximumProjectAgeMinutes: 720, // Alert on projects posted in the last 12 hours.
       notificationEnabled: true,
       soundEnabled: true,
       allowLocalProjects: false,
