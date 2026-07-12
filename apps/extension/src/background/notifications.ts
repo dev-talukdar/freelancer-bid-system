@@ -18,11 +18,20 @@ export function buildNotificationMessage(project: DetectedProjectDto): string {
 }
 
 export async function createProjectNotification(project: DetectedProjectDto): Promise<void> {
-  await chrome.notifications.create(`detected-project:${project.id}`, {
+  const permission = await chrome.notifications.getPermissionLevel();
+  if (permission !== 'granted') {
+    throw new Error(`Chrome notification permission is ${permission}`);
+  }
+
+  const notificationId = await chrome.notifications.create(`detected-project:${project.id}`, {
     type: 'basic',
     iconUrl: chrome.runtime.getURL('icons/icon128.png'),
     title: project.title,
     message: buildNotificationMessage(project),
     priority: 2,
   });
+
+  if (!notificationId) {
+    throw new Error('Chrome did not create a notification');
+  }
 }

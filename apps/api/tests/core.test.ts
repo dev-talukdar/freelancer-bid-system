@@ -30,9 +30,9 @@ import { realisticFreelancerActiveProjectResponse } from './fixtures/freelancer-
 import { FreelancerClient } from '../src/app/modules/freelancer-client/client.js';
 import type { NormalizedProject } from '../src/app/modules/freelancer-client/types.js';
 import {
-  TARGET_COUNTRY_CODES,
   TARGET_SKILL_IDS,
   buildSearchProfileCreatePayload,
+  seedSearchProfile,
   syncActiveProfileTargetSkillIds,
 } from '../src/app/modules/search-profile/service.js';
 import {
@@ -107,7 +107,7 @@ describe('api foundations', () => {
   it('keeps monitor searches broad so local keyword matching can catch valid projects', () => {
     const params = buildMonitorSearchParams(objectIdProfile);
     const monitorQs = buildFreelancerQuery(params);
-    expect(monitorQs.get('sort_field')).toBe('submitdate');
+    expect(monitorQs.get('sort_field')).toBe('time_updated');
     expect(monitorQs.get('reverse_sort')).toBe('true');
     expect(monitorQs.get('limit')).toBe('100');
     expect(monitorQs.get('from_time')).toBeNull();
@@ -222,7 +222,7 @@ describe('freelancer project normalization and matching', () => {
     expect(projectMatches({ ...activeProfile, keywords: ['react.js'] }, project)).toBe(true);
   });
 
-  it('accepts active status and open frontend status', () => {
+  it('accepts active/open variants and open frontend status', () => {
     expect(
       isProjectOpen({ ...realisticProject, frontendProjectStatus: undefined, status: 'active' }),
     ).toBe(true);
@@ -237,6 +237,20 @@ describe('freelancer project normalization and matching', () => {
     ).toBe(true);
     expect(
       isProjectOpen({ ...realisticProject, frontendProjectStatus: undefined, status: 'open' }),
+    ).toBe(true);
+    expect(
+      isProjectOpen({
+        ...realisticProject,
+        frontendProjectStatus: 'frozen open',
+        status: 'pending',
+      }),
+    ).toBe(true);
+    expect(
+      isProjectOpen({
+        ...realisticProject,
+        frontendProjectStatus: 'active_open',
+        status: 'pending',
+      }),
     ).toBe(true);
 
     expect(
@@ -515,49 +529,59 @@ describe('mongoose payload builders', () => {
     expect(payload.jobIds).toEqual([...TARGET_SKILL_IDS]);
   });
 
-  it('existing active profile receives the configured skill IDs and relaxed alert limits safely', async () => {
-    const select = vi.fn().mockReturnValue({
-      lean: vi.fn().mockResolvedValue({
-        _id: new Types.ObjectId(),
-        keywords: ['react'],
-        excludedKeywords: ['casino'],
-        jobIds: [],
-        countries: ['us'],
-        languages: ['en'],
-        minimumFixedBudget: 250,
-        minimumHourlyRate: 25,
+  it('does not overwrite active profile choices during startup sync', async () => {
+    const findOne = vi.spyOn(SearchProfileModel, 'findOne');
+    const updateOne = vi.spyOn(SearchProfileModel, 'updateOne');
 
-        maximumProjectAgeMinutes: 10,
-        maximumBidCount: 5,
-      }),
-    });
-    const findOne = vi.spyOn(SearchProfileModel, 'findOne').mockReturnValue({ select } as never);
-    const updateOne = vi
-      .spyOn(SearchProfileModel, 'updateOne')
-      .mockResolvedValue({ modifiedCount: 1 } as never);
-
-    await expect(syncActiveProfileTargetSkillIds()).resolves.toBe(true);
-    expect(findOne).toHaveBeenCalledWith({ enabled: true });
-    expect(select).toHaveBeenCalledWith(
-      'keywords excludedKeywords jobIds countries languages minimumFixedBudget minimumHourlyRate maximumProjectAgeMinutes maximumBidCount',
-    );
-
-    expect(updateOne).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }), {
-      $set: {
-        keywords: [],
-        excludedKeywords: [],
-        jobIds: [...TARGET_SKILL_IDS],
-        countries: [...TARGET_COUNTRY_CODES],
-        languages: [],
-        minimumFixedBudget: null,
-        minimumHourlyRate: null,
-        maximumProjectAgeMinutes: 720,
-        maximumBidCount: 300,
-      },
-    });
+    await expect(syncActiveProfileTargetSkillIds()).resolves.toBe(false);
+    expect(findOne).not.toHaveBeenCalled();
+    expect(updateOne).not.toHaveBeenCalled();
 
     findOne.mockRestore();
     updateOne.mockRestore();
+  });
+
+  it('does not run profile sync when profiles already exist', async () => {
+    const exists = vi
+      .spyOn(SearchProfileModel, 'exists')
+      .mockResolvedValue({ _id: new Types.ObjectId() } as never);
+    const create = vi.spyOn(SearchProfileModel, 'create');
+
+    await seedSearchProfile();
+
+    expect(create).not.toHaveBeenCalled();
+    exists.mockRestore();
+    create.mockRestore();
+  });
+
+  it('seeds broad default profile filters for realistic notifications', () => {
+    const payload = buildSearchProfileCreatePayload({
+      name: 'Web development monitoring',
+      enabled: true,
+      keywords: [],
+      excludedKeywords: [],
+      jobIds: [...TARGET_SKILL_IDS],
+      countries: [],
+      currencies: [],
+      languages: [],
+      projectTypes: ['fixed', 'hourly'],
+      minimumFixedBudget: null,
+      maximumFixedBudget: null,
+      minimumHourlyRate: null,
+      maximumHourlyRate: null,
+      pollIntervalSeconds: 30,
+      maximumProjectAgeMinutes: 720,
+      notificationEnabled: true,
+      soundEnabled: true,
+      allowLocalProjects: false,
+    });
+    expect(
+      projectMatches(payload, {
+        ...realisticProject,
+        language: undefined,
+        clientCountryCode: undefined,
+      }),
+    ).toBe(true);
   });
 
   it('omits undefined optional search profile values while preserving null and numbers', () => {

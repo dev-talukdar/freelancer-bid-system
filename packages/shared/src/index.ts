@@ -83,6 +83,31 @@ export interface DetectedProjectDto {
   readAt?: string;
   openedAt?: string;
 }
+
+export type MonitorSkipReason =
+  | 'invalidShape'
+  | 'deleted'
+  | 'notOpen'
+  | 'tooOld'
+  | 'localProject'
+  | 'keywordMismatch'
+  | 'excludedKeyword'
+  | 'jobMismatch'
+  | 'countryMismatch'
+  | 'languageMismatch'
+  | 'currencyMismatch'
+  | 'projectTypeMismatch'
+  | 'bidCountExceeded'
+  | 'fixedBudgetMismatch'
+  | 'hourlyRateMismatch'
+  | 'duplicate';
+export interface MonitorPollResultDto {
+  returned: number;
+  matched: number;
+  new: number;
+  skipped: number;
+  skipReasons: Record<MonitorSkipReason, number>;
+}
 export interface MonitorStatusDto {
   running: boolean;
   polling: boolean;

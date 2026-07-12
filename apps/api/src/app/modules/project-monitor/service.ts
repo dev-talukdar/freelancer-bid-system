@@ -125,6 +125,7 @@ export function buildDetectedProjectCreatePayload(
 export function buildMonitorSearchParams(profile: SearchProfileDocument): ProjectSearchParams {
   return {
     project_types: profile.projectTypes,
+    sort_field: 'time_updated',
     reverse_sort: true,
     limit: 100,
     compact: true,
