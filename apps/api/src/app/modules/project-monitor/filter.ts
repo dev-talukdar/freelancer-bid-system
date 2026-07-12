@@ -109,8 +109,9 @@ const isDefinedNumber = (value: number | null | undefined): value is number =>
 
 export function isProjectOpen(project: NormalizedProject): boolean {
   if (project.deleted === true) return false;
-  if (project.frontendProjectStatus) return project.frontendProjectStatus === 'open';
-  return project.status === 'active';
+  const frontendStatus = project.frontendProjectStatus?.trim().toLowerCase();
+  const backendStatus = project.status?.trim().toLowerCase();
+  return frontendStatus === 'open' || backendStatus === 'active';
 }
 
 export function projectSubmissionDate(project: NormalizedProject): Date | undefined {

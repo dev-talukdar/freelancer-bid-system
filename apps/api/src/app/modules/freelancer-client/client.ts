@@ -11,6 +11,8 @@ import { normalizeFreelancerProject } from './normalize.js';
 import type { FreelancerProject, ProjectSearchParams } from './types.js';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const ACTIVE_PROJECTS_PATH = '/projects/0.1/projects/active/';
+const MAX_ACTIVE_PROJECT_PAGES = 3;
 
 export class FreelancerClient {
   public rateLimitState: RateLimitState = { windows: [] };
@@ -24,6 +26,7 @@ export class FreelancerClient {
     if (!this.token)
       throw mapFreelancerError(401, { message: 'Freelancer token is not configured' });
     const url = `${this.baseUrl}${path}${qs ? `?${qs}` : ''}`;
+    logger.debug({ path, query: qs?.toString() ?? '' }, 'freelancer api request');
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15_000);
     const res = await fetch(url, {
@@ -62,13 +65,23 @@ export class FreelancerClient {
   }
 
   async activeProjects(params: ProjectSearchParams) {
-    const data = await this.get<
-      { result?: { projects?: FreelancerProject[] } } | { projects?: FreelancerProject[] }
-    >('/projects/0.1/projects/active/', buildFreelancerQuery(params));
-    const projects =
-      ('result' in data
-        ? data.result?.projects
-        : (data as { projects?: FreelancerProject[] }).projects) ?? [];
+    const pageSize = params.limit ?? 100;
+    const startOffset = params.offset ?? 0;
+    const projects: FreelancerProject[] = [];
+
+    for (let page = 0; page < MAX_ACTIVE_PROJECT_PAGES; page++) {
+      const pageParams = { ...params, limit: pageSize, offset: startOffset + page * pageSize };
+      const data = await this.get<
+        { result?: { projects?: FreelancerProject[] } } | { projects?: FreelancerProject[] }
+      >(ACTIVE_PROJECTS_PATH, buildFreelancerQuery(pageParams));
+      const pageProjects =
+        ('result' in data
+          ? data.result?.projects
+          : (data as { projects?: FreelancerProject[] }).projects) ?? [];
+      projects.push(...pageProjects);
+      if (pageProjects.length < pageSize) break;
+    }
+
     return projects.map(normalizeFreelancerProject);
   }
 }

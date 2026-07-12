@@ -4,7 +4,7 @@ import { logger } from '../../config/logger.js';
 import { env } from '../../config/env.js';
 import { FreelancerClient } from '../freelancer-client/client.js';
 import { DetectedProjectModel } from '../detected-project/model.js';
-import { createSkipReasons, projectSkipReason } from './filter.js';
+import { createSkipReasons, projectSkipReason, projectSubmissionDate } from './filter.js';
 import { PollLock } from './lock.js';
 
 import type { NormalizedProject, ProjectSearchParams } from '../freelancer-client/types.js';
@@ -28,6 +28,72 @@ interface DetectedProjectCreateInput {
   timeSubmitted?: Date;
   timeUpdated?: Date;
 }
+
+const projectAgeMinutes = (project: NormalizedProject): number | undefined => {
+  const submittedAt = projectSubmissionDate(project);
+  if (submittedAt === undefined) return undefined;
+  return Math.floor((Date.now() - submittedAt.getTime()) / 60_000);
+};
+
+const projectIsoDate = (timestamp: number | undefined): string | undefined =>
+  timestamp === undefined ? undefined : new Date(timestamp * 1000).toISOString();
+
+const normalizedProjectSummary = (profile: SearchProfileDocument, project: NormalizedProject) => ({
+  id: project.id,
+  title: project.title,
+  status: project.status,
+  frontendProjectStatus: project.frontendProjectStatus,
+  deleted: project.deleted,
+  submittedAt: projectIsoDate(project.timeSubmitted),
+  updatedAt: projectIsoDate(project.timeUpdated),
+  ageMinutes: projectAgeMinutes(project),
+  skillIds: project.jobs.map((job) => job.id),
+  skillNames: project.jobs.map((job) => job.name),
+  skipReason: projectSkipReason(profile, project),
+});
+
+const logProjectFetchDiagnostics = (
+  profile: SearchProfileDocument,
+  projects: Array<NormalizedProject | undefined>,
+) => {
+  const normalizedProjects = projects.filter(
+    (project): project is NormalizedProject => project !== undefined,
+  );
+  const firstProject = normalizedProjects[0];
+  const lastProject = normalizedProjects.at(-1);
+  logger.debug(
+    {
+      returned: projects.length,
+      firstProject:
+        firstProject === undefined ? undefined : normalizedProjectSummary(profile, firstProject),
+      lastProject:
+        lastProject === undefined ? undefined : normalizedProjectSummary(profile, lastProject),
+      firstFiveProjects: normalizedProjects
+        .slice(0, 5)
+        .map((project) => normalizedProjectSummary(profile, project)),
+    },
+    'freelancer normalized project diagnostics',
+  );
+};
+
+const logDebugProjectDiagnostic = (
+  profile: SearchProfileDocument,
+  projects: Array<NormalizedProject | undefined>,
+) => {
+  const debugProjectId = env.DEBUG_FREELANCER_PROJECT_ID;
+  if (debugProjectId === undefined) return;
+  const project = projects.find((candidate) => candidate?.id === debugProjectId);
+  logger.info(
+    {
+      projectId: debugProjectId,
+      fetched: project !== undefined,
+      skipReason: project === undefined ? undefined : projectSkipReason(profile, project),
+      normalizedProjectSummary:
+        project === undefined ? undefined : normalizedProjectSummary(profile, project),
+    },
+    'freelancer debug project diagnostic',
+  );
+};
 
 export function buildDetectedProjectCreatePayload(
   profile: SearchProfileDocument,
@@ -57,10 +123,15 @@ export function buildDetectedProjectCreatePayload(
 }
 
 export function buildMonitorSearchParams(profile: SearchProfileDocument): ProjectSearchParams {
+  const maximumAgeMinutes = profile.maximumProjectAgeMinutes ?? 10;
+  const fromTime = Math.floor((Date.now() - maximumAgeMinutes * 60_000) / 1000);
+
   return {
     project_types: profile.projectTypes,
+    from_time: fromTime,
     sort_field: 'time_updated',
-    reverse_sort: false,
+    // Freelancer active-project search returns newest projects first when reverse_sort=true for time_updated.
+    reverse_sort: true,
     limit: 100,
     compact: true,
     full_description: true,
@@ -133,14 +204,33 @@ export class ProjectMonitor {
           20,
           profile.pollIntervalSeconds ?? DEFAULT_POLL_INTERVAL_SECONDS,
         );
+        logger.info(
+          {
+            profileId: profile._id,
+            enabled: profile.enabled,
+            maximumProjectAgeMinutes: profile.maximumProjectAgeMinutes,
+            jobIds: profile.jobIds,
+            countries: profile.countries,
+            currencies: profile.currencies,
+            languages: profile.languages,
+            projectTypes: profile.projectTypes,
+            maximumBidCount: profile.maximumBidCount,
+            minimumFixedBudget: profile.minimumFixedBudget,
+            maximumFixedBudget: profile.maximumFixedBudget,
+            minimumHourlyRate: profile.minimumHourlyRate,
+            maximumHourlyRate: profile.maximumHourlyRate,
+          },
+          'monitor active profile',
+        );
         // Fetch a broad newest-first window, then apply all profile filters locally. Passing job,
         // country, or language filters to Freelancer can hide valid keyword matches before our matcher
         // sees them (for example website-development or QA projects whose skill IDs are not in our
         // configured web-development job list).
-        const projects = await this.client.activeProjects(buildMonitorSearchParams(profile));
+        const searchParams = buildMonitorSearchParams(profile);
+        const projects = await this.client.activeProjects(searchParams);
 
-        if (env.NODE_ENV === 'development' && projects[0])
-          logger.debug({ project: projects[0] }, 'first normalized freelancer project sample');
+        logProjectFetchDiagnostics(profile, projects);
+        logDebugProjectDiagnostic(profile, projects);
         let matched = 0;
         let newCount = 0;
         for (const project of projects) {
@@ -157,19 +247,27 @@ export class ProjectMonitor {
                 title: project.title,
                 status: project.status,
                 frontendProjectStatus: project.frontendProjectStatus,
-                language: project.language,
-                type: project.type,
-                clientCountry: project.clientCountry,
-                clientCountryCode: project.clientCountryCode,
+                reason,
+                deleted: project.deleted,
+                submittedAt: projectIsoDate(project.timeSubmitted),
+                updatedAt: projectIsoDate(project.timeUpdated),
+                ageMinutes: projectAgeMinutes(project),
+                maximumProjectAgeMinutes: profile.maximumProjectAgeMinutes,
+                projectSkillIds: project.jobs.map((job) => job.id),
+                projectSkillNames: project.jobs.map((job) => job.name),
+                configuredSkillIds: profile.jobIds,
+                country: project.clientCountryCode ?? project.clientCountry,
+                configuredCountries: profile.countries,
                 currency: project.currency?.code,
+                configuredCurrencies: profile.currencies,
+                language: project.language,
+                configuredLanguages: profile.languages,
+                projectType: project.type,
+                configuredProjectTypes: profile.projectTypes,
                 budgetMinimum: project.budget?.minimum,
                 budgetMaximum: project.budget?.maximum,
                 bidCount: project.bidStats?.bidCount,
-                timeSubmitted: project.timeSubmitted,
-                maximumProjectAgeMinutes: profile.maximumProjectAgeMinutes,
                 maximumBidCount: profile.maximumBidCount,
-
-                reason,
               },
               'freelancer project rejected',
             );

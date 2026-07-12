@@ -26,6 +26,7 @@ const envSchema = z.object({
   LOCAL_API_SECRET: z.string().min(16),
   LOG_LEVEL: z.string().default('info'),
   DETECTED_PROJECT_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
+  DEBUG_FREELANCER_PROJECT_ID: z.coerce.number().int().positive().optional(),
 });
 
 export const env = envSchema.parse(process.env);
