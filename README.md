@@ -33,15 +33,15 @@ Search profiles control alert filtering and are intentionally independent from F
 
 - Freelancer profile skills control whether your Freelancer account is eligible to bid on a project.
 - `SearchProfile.jobIds` control skill-ID based alert filtering only.
-- `SearchProfile.keywords` control text-based alert matching across project title, preview description, full description, and job names.
-- `SearchProfile.excludedKeywords` reject unwanted domains across the same title, description, and job-name text.
-- Empty `jobIds` means no skill-ID restriction is applied to alerts.
+- `SearchProfile.keywords` and `SearchProfile.excludedKeywords` are empty by default; detection is based on at least one configured skill plus configured country and currency.
+- Empty `jobIds` means no skill-ID restriction is applied to alerts. Keep `jobIds` populated when you require at least one skill match.
 - Empty `keywords` means no keyword restriction is applied to alerts.
 - `maximumProjectAgeMinutes` defaults to `720` (12 hours), accepts integer values from `1` to `1440`, and uses `timeSubmitted` (not `timeUpdated`) so old projects updated recently do not trigger new alerts.
 - `countries`, `currencies`, and `languages` are local alert filters. Empty arrays mean unrestricted. The default profile leaves `languages` unrestricted because Freelancer API responses can omit language even when the website shows English.
 - Budget minimum filters are disabled by default so lower-budget projects can still be detected and reviewed manually.
+- `maximumBidCount` defaults to `300`; projects with more than 300 bids are skipped.
 
-The default seeded profile excludes these keywords: `casino`, `gambling`, `crypto casino`, `betting`, `slot`, `slots`, `adult`, `academic`, and `homework`.
+The default seeded profile does not use include or exclude keywords.
 
 ## Monitoring and duplicate prevention
 

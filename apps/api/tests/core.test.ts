@@ -513,6 +513,8 @@ describe('mongoose payload builders', () => {
     const select = vi.fn().mockReturnValue({
       lean: vi.fn().mockResolvedValue({
         _id: new Types.ObjectId(),
+        keywords: ['react'],
+        excludedKeywords: ['casino'],
         jobIds: [],
         countries: ['us'],
         languages: ['en'],
@@ -530,18 +532,20 @@ describe('mongoose payload builders', () => {
     await expect(syncActiveProfileTargetSkillIds()).resolves.toBe(true);
     expect(findOne).toHaveBeenCalledWith({ enabled: true });
     expect(select).toHaveBeenCalledWith(
-      'jobIds countries languages minimumFixedBudget minimumHourlyRate maximumProjectAgeMinutes maximumBidCount',
+      'keywords excludedKeywords jobIds countries languages minimumFixedBudget minimumHourlyRate maximumProjectAgeMinutes maximumBidCount',
     );
 
     expect(updateOne).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }), {
       $set: {
+        keywords: [],
+        excludedKeywords: [],
         jobIds: [...TARGET_SKILL_IDS],
         countries: [...TARGET_COUNTRY_CODES],
         languages: [],
         minimumFixedBudget: null,
         minimumHourlyRate: null,
         maximumProjectAgeMinutes: 720,
-        maximumBidCount: null,
+        maximumBidCount: 300,
       },
     });
 
