@@ -25,6 +25,7 @@ import { mapFreelancerError } from '../src/app/error/app-error.js';
 import { realisticFreelancerActiveProjectResponse } from './fixtures/freelancer-active-project-response.js';
 import type { NormalizedProject } from '../src/app/modules/freelancer-client/types.js';
 import {
+  TARGET_COUNTRY_CODES,
   TARGET_SKILL_IDS,
   buildSearchProfileCreatePayload,
   syncActiveProfileTargetSkillIds,
@@ -237,6 +238,20 @@ describe('freelancer project normalization and matching', () => {
       jobs: [],
     };
     expect(projectMatches({ ...activeProfile, languages: [] }, minimal)).toBe(true);
+  });
+
+  it('matches configured country names and aliases against country codes', () => {
+    const profile = { ...activeProfile, countries: ['USA', 'Taiwan', 'Poland'] };
+    expect(projectMatches(profile, { ...realisticProject, clientCountryCode: 'us' })).toBe(true);
+    expect(projectMatches(profile, { ...realisticProject, clientCountryCode: 'tw' })).toBe(true);
+    expect(projectMatches(profile, { ...realisticProject, clientCountry: 'Poland' })).toBe(true);
+    expect(
+      projectMatches(profile, {
+        ...realisticProject,
+        clientCountryCode: undefined,
+        clientCountry: 'United States',
+      }),
+    ).toBe(true);
   });
 
   it('filters projects by allowed currencies', () => {
@@ -459,9 +474,15 @@ describe('mongoose payload builders', () => {
     expect(payload.jobIds).toEqual([...TARGET_SKILL_IDS]);
   });
 
-  it('existing active profile receives the configured skill IDs safely', async () => {
+  it('existing active profile receives the configured skill IDs and relaxed alert limits safely', async () => {
     const select = vi.fn().mockReturnValue({
-      lean: vi.fn().mockResolvedValue({ _id: new Types.ObjectId(), jobIds: [] }),
+      lean: vi.fn().mockResolvedValue({
+        _id: new Types.ObjectId(),
+        jobIds: [],
+        countries: ['us'],
+        maximumProjectAgeMinutes: 10,
+        maximumBidCount: 5,
+      }),
     });
     const findOne = vi.spyOn(SearchProfileModel, 'findOne').mockReturnValue({ select } as never);
     const updateOne = vi
@@ -470,8 +491,17 @@ describe('mongoose payload builders', () => {
 
     await expect(syncActiveProfileTargetSkillIds()).resolves.toBe(true);
     expect(findOne).toHaveBeenCalledWith({ enabled: true });
+    expect(select).toHaveBeenCalledWith(
+      'jobIds countries maximumProjectAgeMinutes maximumBidCount',
+    );
+
     expect(updateOne).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }), {
-      $set: { jobIds: [...TARGET_SKILL_IDS] },
+      $set: {
+        jobIds: [...TARGET_SKILL_IDS],
+        countries: [...TARGET_COUNTRY_CODES],
+        maximumProjectAgeMinutes: 60,
+        maximumBidCount: null,
+      },
     });
 
     findOne.mockRestore();

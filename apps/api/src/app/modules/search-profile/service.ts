@@ -42,25 +42,72 @@ export const TARGET_SKILL_IDS = [
   979, // TypeScript
 ] as const;
 
+export const TARGET_COUNTRY_CODES = [
+  'tw',
+  'hk',
+  'nz',
+  'il',
+  'sa',
+  'nl',
+  'gr',
+  'es',
+  'it',
+  'ie',
+  'sg',
+  'pt',
+  'se',
+  'ch',
+  'pl',
+  'be',
+  'fr',
+  'de',
+  'gb',
+  'au',
+  'ca',
+  'us',
+] as const;
+
 const targetSkillIds = (): number[] => [...TARGET_SKILL_IDS];
+const targetCountryCodes = (): string[] => [...TARGET_COUNTRY_CODES];
 
 const sameNumberArray = (left: number[], right: readonly number[]): boolean =>
   left.length === right.length && left.every((value, index) => value === right[index]);
+const sameStringArray = (left: string[], right: readonly string[]): boolean =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
 
 export const syncActiveProfileTargetSkillIds = async (): Promise<boolean> => {
-  const activeProfile = await SearchProfileModel.findOne({ enabled: true }).select('jobIds').lean();
+  const activeProfile = await SearchProfileModel.findOne({ enabled: true })
+    .select('jobIds countries maximumProjectAgeMinutes maximumBidCount')
+    .lean();
 
-  if (!activeProfile || sameNumberArray(activeProfile.jobIds, TARGET_SKILL_IDS)) {
-    return false;
+  if (!activeProfile) return false;
+
+  const $set: Partial<
+    Pick<
+      SearchProfileCreatePayload,
+      'jobIds' | 'countries' | 'maximumProjectAgeMinutes' | 'maximumBidCount'
+    >
+  > = {};
+
+  if (!sameNumberArray(activeProfile.jobIds, TARGET_SKILL_IDS)) {
+    $set.jobIds = targetSkillIds();
+  }
+
+  if (!sameStringArray(activeProfile.countries, TARGET_COUNTRY_CODES)) {
+    $set.countries = targetCountryCodes();
+  }
+
+  if ((activeProfile.maximumProjectAgeMinutes ?? 0) < 60) {
+    $set.maximumProjectAgeMinutes = 60;
+  }
+
+  if (activeProfile.maximumBidCount !== null) {
+    $set.maximumBidCount = null;
   }
 
   const result = await SearchProfileModel.updateOne(
     { _id: activeProfile._id, enabled: true },
-    {
-      $set: {
-        jobIds: targetSkillIds(),
-      },
-    },
+    { $set },
   );
 
   return result.modifiedCount > 0;
@@ -222,33 +269,7 @@ export const seedSearchProfile = async (): Promise<void> => {
         'homework',
       ],
       jobIds: targetSkillIds(),
-      countries: [
-        'us',
-        'ca',
-        'au',
-        'gb',
-        'de',
-        'fr',
-        'be',
-        'ae',
-        'kw',
-        'jo',
-        'bn',
-        'ch',
-        'se',
-        'pt',
-        'sg',
-        'ie',
-        'it',
-        'es',
-        'gr',
-        'nl',
-        'sa',
-        'il',
-        'nz',
-        'hk',
-        'qa',
-      ],
+      countries: targetCountryCodes(),
       currencies: ['USD', 'NZD', 'AUD', 'GBP', 'HKD', 'SGD', 'EUR', 'CAD'],
       languages: ['en'],
       projectTypes: ['fixed', 'hourly'],
