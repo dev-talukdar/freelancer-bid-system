@@ -1,4 +1,3 @@
- 
 /* eslint-disable @typescript-eslint/consistent-type-imports */
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -170,14 +169,22 @@ function App() {
     if (action === 'poll') setIsPolling(true);
     try {
       const api = new LocalApiClient(await getSettings());
-      await api[action]();
-      setFeedback(
-        action === 'poll'
-          ? 'Poll completed'
-          : action === 'start'
-            ? 'Monitoring started'
-            : 'Monitoring stopped',
-      );
+      const result = await api[action]();
+      if (action === 'poll') {
+        const poll = result as Awaited<ReturnType<LocalApiClient['poll']>>;
+        const reasons = Object.entries(poll.skipReasons)
+          .filter(([, count]) => count > 0)
+          .map(([reason, count]) => `${reason}: ${count}`)
+          .join(', ');
+        setFeedback(
+          `Poll completed — returned: ${poll.returned}, matched: ${poll.matched}, new: ${poll.new}, skipped: ${poll.skipped}${
+            reasons ? ` (${reasons})` : ''
+          }.${poll.matched === 0 ? ' No notification because no project matched filters.' : ''}`,
+        );
+        chrome.runtime.sendMessage({ type: 'CHECK_NOTIFICATIONS' }).catch(() => undefined);
+      } else {
+        setFeedback(action === 'start' ? 'Monitoring started' : 'Monitoring stopped');
+      }
       await load();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Action failed');

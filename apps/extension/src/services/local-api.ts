@@ -2,6 +2,7 @@ import {
   LOCAL_API_BASE_URL,
   type ApiResponse,
   type HealthDto,
+  type MonitorPollResultDto,
   type MonitorStatusDto,
   type PaginatedDetectedProjectsDto,
   type UnnotifiedDetectedProjectsDto,
@@ -46,7 +47,7 @@ export class LocalApiClient {
     return this.request<MonitorStatusDto>('/api/v1/monitor/stop', { method: 'POST' });
   }
   poll() {
-    return this.request<unknown>('/api/v1/monitor/poll', { method: 'POST' });
+    return this.request<MonitorPollResultDto>('/api/v1/monitor/poll', { method: 'POST' });
   }
   detected(unreadOnly = false, pageSize = 5) {
     return this.request<PaginatedDetectedProjectsDto>(

@@ -107,16 +107,27 @@ const countryTokens = (value: string | undefined): string[] => {
 const isDefinedNumber = (value: number | null | undefined): value is number =>
   typeof value === 'number' && Number.isFinite(value);
 
-const OPEN_PROJECT_STATUSES = new Set(['active', 'open']);
+const OPEN_STATUS_PATTERNS = [/\bactive\b/i, /\bopen\b/i];
+const CLOSED_STATUS_PATTERNS = [
+  /\bclosed\b/i,
+  /\bcomplete(d)?\b/i,
+  /\bcancel(l)?ed\b/i,
+  /\bdeleted\b/i,
+];
+
+const statusLooksOpen = (value: string | undefined): boolean => {
+  if (value === undefined) return false;
+  const normalizedStatus = normalize(value);
+  if (normalizedStatus.length === 0) return false;
+  return (
+    OPEN_STATUS_PATTERNS.some((pattern) => pattern.test(normalizedStatus)) &&
+    !CLOSED_STATUS_PATTERNS.some((pattern) => pattern.test(normalizedStatus))
+  );
+};
 
 export function isProjectOpen(project: NormalizedProject): boolean {
   if (project.deleted === true) return false;
-  const frontendStatus = project.frontendProjectStatus?.trim().toLowerCase();
-  const backendStatus = project.status?.trim().toLowerCase();
-  return (
-    OPEN_PROJECT_STATUSES.has(frontendStatus ?? '') ||
-    OPEN_PROJECT_STATUSES.has(backendStatus ?? '')
-  );
+  return statusLooksOpen(project.frontendProjectStatus) || statusLooksOpen(project.status);
 }
 
 const projectDateFromUnixTimestamp = (timestamp: number | undefined): Date | undefined => {
