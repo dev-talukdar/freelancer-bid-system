@@ -1,4 +1,3 @@
- 
 import { DEFAULT_POLL_INTERVAL_SECONDS, type ProjectType } from '@fbs/shared';
 import type { Types } from 'mongoose';
 import { logger } from '../../config/logger.js';
@@ -123,11 +122,19 @@ export function buildDetectedProjectCreatePayload(
   return payload;
 }
 
+const unixSecondsNow = () => Math.floor(Date.now() / 1000);
+
+const hasFiniteNumber = (value: number | null | undefined): value is number =>
+  typeof value === 'number' && Number.isFinite(value);
+
 export function buildMonitorSearchParams(profile: SearchProfileDocument): ProjectSearchParams {
-  return {
-    project_types: profile.projectTypes,
+  const maximumProjectAgeMinutes = profile.maximumProjectAgeMinutes ?? 10;
+  const fromTime = unixSecondsNow() - maximumProjectAgeMinutes * 60;
+
+  const params: ProjectSearchParams = {
+    from_time: fromTime,
     sort_field: 'time_updated',
-    reverse_sort: true,
+    reverse_sort: false,
     limit: 100,
     compact: true,
     full_description: true,
@@ -137,6 +144,19 @@ export function buildMonitorSearchParams(profile: SearchProfileDocument): Projec
     user_display_info: true,
     user_employer_reputation: true,
   };
+
+  if (profile.projectTypes.length > 0) params.project_types = profile.projectTypes;
+  if (profile.jobIds.length > 0) params.jobs = profile.jobIds;
+  if (profile.countries.length > 0) params.countries = profile.countries;
+  if (profile.languages.length > 0) params.languages = profile.languages;
+  if (hasFiniteNumber(profile.minimumFixedBudget)) params.min_price = profile.minimumFixedBudget;
+  if (hasFiniteNumber(profile.maximumFixedBudget)) params.max_price = profile.maximumFixedBudget;
+  if (hasFiniteNumber(profile.minimumHourlyRate))
+    params.min_hourly_rate = profile.minimumHourlyRate;
+  if (hasFiniteNumber(profile.maximumHourlyRate))
+    params.max_hourly_rate = profile.maximumHourlyRate;
+
+  return params;
 }
 
 export interface MonitorRuntime {
@@ -218,10 +238,10 @@ export class ProjectMonitor {
           },
           'monitor active profile',
         );
-        // Fetch a broad newest-first window, then apply all profile filters locally. Passing job,
-        // country, or language filters to Freelancer can hide valid keyword matches before our matcher
-        // sees them (for example website-development or QA projects whose skill IDs are not in our
-        // configured web-development job list).
+        // Ask Freelancer for the same newest matching slice that the website search uses, then keep
+        // the local matcher as the source of truth for currencies, budgets, excluded keywords, local
+        // projects, bid counts, and any response-shape differences. Freelancer documents
+        // reverse_sort=true as ascending order, so keep it false for latest-first results.
         const searchParams = buildMonitorSearchParams(profile);
         const projects = await this.client.activeProjects(searchParams);
 

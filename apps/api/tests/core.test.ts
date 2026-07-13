@@ -105,16 +105,34 @@ describe('api foundations', () => {
     expect(qs.get('from_time')).toBe('1720000000');
   });
 
-  it('keeps monitor searches broad so local keyword matching can catch valid projects', () => {
-    const params = buildMonitorSearchParams(objectIdProfile);
+  it('builds latest-first monitor searches with profile filters and recency window', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-12T12:00:00.000Z'));
+    const params = buildMonitorSearchParams({
+      ...objectIdProfile,
+      jobIds: [9, 500],
+      countries: ['us', 'gb'],
+      languages: ['en'],
+      minimumFixedBudget: 100,
+      maximumFixedBudget: 1000,
+      minimumHourlyRate: 25,
+      maximumHourlyRate: 150,
+      maximumProjectAgeMinutes: 30,
+    });
+
     const monitorQs = buildFreelancerQuery(params);
     expect(monitorQs.get('sort_field')).toBe('time_updated');
-    expect(monitorQs.get('reverse_sort')).toBe('true');
+    expect(monitorQs.get('reverse_sort')).toBe('false');
     expect(monitorQs.get('limit')).toBe('100');
-    expect(monitorQs.get('from_time')).toBeNull();
-    expect(params.jobs).toBeUndefined();
-    expect(params.countries).toBeUndefined();
-    expect(params.languages).toBeUndefined();
+    expect(monitorQs.get('from_time')).toBe(String(Math.floor(Date.now() / 1000) - 30 * 60));
+    expect(monitorQs.getAll('jobs[]')).toEqual(['9', '500']);
+    expect(monitorQs.getAll('countries[]')).toEqual(['us', 'gb']);
+    expect(monitorQs.getAll('languages[]')).toEqual(['en']);
+    expect(monitorQs.get('min_price')).toBe('100');
+    expect(monitorQs.get('max_price')).toBe('1000');
+    expect(monitorQs.get('min_hourly_rate')).toBe('25');
+    expect(monitorQs.get('max_hourly_rate')).toBe('150');
+    vi.useRealTimers();
   });
 
   it('parses rate limit headers and adapts delay', () => {
