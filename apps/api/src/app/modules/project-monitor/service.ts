@@ -147,7 +147,9 @@ export function buildMonitorSearchParams(profile: SearchProfileDocument): Projec
     full_description: true,
     job_details: true,
     user_details: true,
+    location_details: true,
     user_country_details: true,
+    user_location_details: true,
     user_display_info: true,
     user_employer_reputation: true,
   };

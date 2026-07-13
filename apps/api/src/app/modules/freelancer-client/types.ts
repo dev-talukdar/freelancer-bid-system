@@ -6,6 +6,12 @@ export interface FreelancerJob {
   seo_url?: string;
 }
 
+export interface FreelancerUser {
+  id: number;
+  country?: { name?: string; code?: string };
+  location?: { country?: { name?: string; code?: string } };
+}
+
 export interface FreelancerProject {
   id: number;
   title: string;
@@ -62,6 +68,15 @@ export interface NormalizedProject {
   ownerId?: number;
 }
 
+export interface ActiveProjectsResponse {
+  result?: {
+    projects?: FreelancerProject[];
+    users?: Record<string, FreelancerUser> | FreelancerUser[];
+  };
+  projects?: FreelancerProject[];
+  users?: Record<string, FreelancerUser> | FreelancerUser[];
+}
+
 export interface ProjectSearchParams {
   query?: string;
   project_types?: string[];
@@ -80,6 +95,7 @@ export interface ProjectSearchParams {
   job_details?: boolean;
   user_details?: boolean;
   location_details?: boolean;
+  user_location_details?: boolean;
   user_country_details?: boolean;
   user_display_info?: boolean;
   user_employer_reputation?: boolean;

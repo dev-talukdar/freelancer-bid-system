@@ -135,6 +135,9 @@ describe('api foundations', () => {
     expect(monitorQs.get('max_price')).toBe('1000');
     expect(monitorQs.get('min_hourly_rate')).toBe('25');
     expect(monitorQs.get('max_hourly_rate')).toBe('150');
+    expect(monitorQs.get('location_details')).toBe('true');
+    expect(monitorQs.get('user_country_details')).toBe('true');
+    expect(monitorQs.get('user_location_details')).toBe('true');
     vi.useRealTimers();
   });
 
@@ -728,6 +731,43 @@ describe('freelancer client pagination', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain('reverse_sort=false');
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain('from_time=1');
+    vi.unstubAllGlobals();
+  });
+
+  it('uses owner country details when project location is omitted', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      json: () =>
+        Promise.resolve({
+          result: {
+            projects: [
+              {
+                id: 10,
+                title: 'Fresh React work',
+                type: 'fixed',
+                status: 'active',
+                time_submitted: Math.floor(Date.now() / 1000),
+                owner_id: 99,
+                jobs: [{ id: 759, name: 'React.js' }],
+              },
+            ],
+            users: {
+              '99': { id: 99, country: { code: 'gb', name: 'United Kingdom' } },
+            },
+          },
+        }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new FreelancerClient('token', 'https://www.freelancer.com/api');
+
+    const projects = await client.activeProjects({ limit: 10 });
+
+    expect(projects[0]?.clientCountryCode).toBe('gb');
+    expect(projects[0]?.clientCountry).toBe('United Kingdom');
+    expect(
+      projectMatches({ ...activeProfile, countries: ['gb'], languages: [] }, projects[0]!),
+    ).toBe(true);
     vi.unstubAllGlobals();
   });
 

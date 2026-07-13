@@ -1,4 +1,9 @@
-import type { FreelancerProject, KnownProjectType, NormalizedProject } from './types.js';
+import type {
+  FreelancerProject,
+  FreelancerUser,
+  KnownProjectType,
+  NormalizedProject,
+} from './types.js';
 
 const toKnownProjectType = (value: string | undefined): KnownProjectType | undefined => {
   if (value === 'fixed' || value === 'hourly') return value;
@@ -15,8 +20,13 @@ export const normalizeOptionalText = (value: string | undefined): string | undef
   return normalized || undefined;
 };
 
+const userCountry = (
+  user: FreelancerUser | undefined,
+): { name?: string; code?: string } | undefined => user?.country ?? user?.location?.country;
+
 export function normalizeFreelancerProject(
   project: FreelancerProject,
+  owner?: FreelancerUser,
 ): NormalizedProject | undefined {
   const type = toKnownProjectType(normalizeOptionalText(project.type));
   const title = typeof project.title === 'string' ? project.title.trim() : undefined;
@@ -78,10 +88,13 @@ export function normalizeFreelancerProject(
     normalized.bidStats = bidStats;
   }
 
-  if (project.location?.country?.name !== undefined)
-    normalized.clientCountry = project.location.country.name;
+  const fallbackCountry = userCountry(owner);
+  const projectCountry = project.location?.country;
 
-  const clientCountryCode = normalizeOptionalText(project.location?.country?.code);
+  const clientCountryName = projectCountry?.name ?? fallbackCountry?.name;
+  if (clientCountryName !== undefined) normalized.clientCountry = clientCountryName;
+
+  const clientCountryCode = normalizeOptionalText(projectCountry?.code ?? fallbackCountry?.code);
   if (clientCountryCode !== undefined) normalized.clientCountryCode = clientCountryCode;
 
   const ownerId = project.owner_id ?? project.owner?.id;
