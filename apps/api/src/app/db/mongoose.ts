@@ -16,7 +16,7 @@ export async function connectMongo(): Promise<void> {
     return;
   }
 
-  await mongoose.connect(env.MONGODB_URI);
+  await mongoose.connect(env.MONGODB_URI, { serverSelectionTimeoutMS: 10_000 });
 
   logger.info('mongodb connected');
 }

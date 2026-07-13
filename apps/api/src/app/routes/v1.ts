@@ -1,5 +1,7 @@
-import { Router, type Response } from 'express';
+import { Router, type Request, type Response } from 'express';
+import mongoose from 'mongoose';
 import { env, isTokenExpiringSoon } from '../config/env.js';
+import { logger } from '../config/logger.js';
 import { dbStatus } from '../db/mongoose.js';
 import { FreelancerClient } from '../modules/freelancer-client/client.js';
 import {
@@ -27,20 +29,33 @@ export const v1Router = Router();
 const ok = (res: Response, message: string, data: unknown) =>
   res.json({ success: true, message, data });
 
-v1Router.get('/health', async (_req, res) =>
+export const healthController = async (_req: Request, res: Response): Promise<void> => {
+  logger.info({ readyState: mongoose.connection.readyState }, 'health request received');
+  const database = dbStatus();
+  logger.info({ readyState: mongoose.connection.readyState, database }, 'database state read');
+  const unreadCount =
+    database === 'connected'
+      ? await DetectedProjectModel.countDocuments({ readAt: { $exists: false } })
+      : 0;
+
   ok(res, 'Health check', {
-    status: dbStatus() === 'connected' ? 'ok' : 'degraded',
-    database: dbStatus(),
+    status: database === 'connected' ? 'ok' : 'degraded',
+    database,
     monitoring: {
       ...monitor.state,
       polling: monitor.lock.isLocked(),
-      unreadCount: await DetectedProjectModel.countDocuments({ readAt: { $exists: false } }),
+      unreadCount,
     },
     freelancerTokenConfigured: Boolean(env.FREELANCER_ACCESS_TOKEN),
     freelancerTokenExpiresAt: env.FREELANCER_TOKEN_EXPIRES_AT,
     freelancerTokenExpirationWarning: isTokenExpiringSoon(),
-  }),
-);
+  });
+  logger.info({ database }, 'health response sent');
+};
+
+v1Router.get('/health', (req, res, next) => {
+  void healthController(req, res).catch(next);
+});
 v1Router.get('/freelancer/me', async (_req, res, next) => {
   try {
     const me = await new FreelancerClient().self();

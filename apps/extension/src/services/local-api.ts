@@ -1,5 +1,6 @@
 import {
   LOCAL_API_BASE_URL,
+  type ApiFailure,
   type ApiResponse,
   type HealthDto,
   type MonitorPollResultDto,
@@ -13,25 +14,73 @@ export interface ExtensionSettings {
   apiBaseUrl: string;
 }
 
+export type LocalApiErrorKind =
+  'timeout' | 'unauthorized' | 'network' | 'http' | 'invalid-response';
+
+export class LocalApiError extends Error {
+  constructor(
+    public readonly kind: LocalApiErrorKind,
+    message: string,
+    public readonly status?: number,
+  ) {
+    super(message);
+    this.name = 'LocalApiError';
+  }
+}
+
+const REQUEST_TIMEOUT_MS = 10_000;
+
 export async function parseApiResponse<T>(res: Response): Promise<T> {
-  const body = (await res.json()) as ApiResponse<T>;
-  if (!res.ok || !body.success) throw new Error(body.message);
+  let body: ApiResponse<T>;
+  try {
+    body = (await res.json()) as ApiResponse<T>;
+  } catch {
+    throw new LocalApiError('invalid-response', 'Backend returned invalid JSON', res.status);
+  }
+
+  if (!res.ok || !body.success) {
+    const failure = body as ApiFailure;
+    const kind: LocalApiErrorKind = res.status === 401 ? 'unauthorized' : 'http';
+    throw new LocalApiError(kind, failure.message, res.status);
+  }
+
   return body.data;
+}
+
+export function mapFetchError(error: unknown): LocalApiError {
+  if (error instanceof LocalApiError) return error;
+  if (error instanceof DOMException && error.name === 'TimeoutError') {
+    return new LocalApiError('timeout', 'Backend request timed out');
+  }
+  if (error instanceof TypeError) {
+    return new LocalApiError('network', 'Backend connection failed');
+  }
+  return new LocalApiError(
+    'network',
+    error instanceof Error ? error.message : 'Backend request failed',
+  );
 }
 
 export class LocalApiClient {
   constructor(private settings: ExtensionSettings) {}
 
   private async request<T>(path: string, init: RequestInit = {}) {
-    const res = await fetch(`${this.settings.apiBaseUrl}${path}`, {
-      ...init,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Local-API-Key': this.settings.localApiSecret,
-        ...init.headers,
-      },
-    });
-    return parseApiResponse<T>(res);
+    try {
+      const res = await fetch(`${this.settings.apiBaseUrl}${path}`, {
+        ...init,
+        cache: 'no-store',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          'X-Local-API-Key': this.settings.localApiSecret,
+          ...init.headers,
+        },
+        signal: init.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      return await parseApiResponse<T>(res);
+    } catch (error) {
+      throw mapFetchError(error);
+    }
   }
 
   health() {
