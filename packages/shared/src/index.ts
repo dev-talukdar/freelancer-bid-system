@@ -4,6 +4,10 @@ export const FREELANCER_PROJECT_BASE_URL = 'https://www.freelancer.com/projects/
 export const MIN_POLL_INTERVAL_SECONDS = 20;
 export const DEFAULT_POLL_INTERVAL_SECONDS = 30;
 export const DEFAULT_MAXIMUM_PROJECT_AGE_MINUTES = 600;
+export const DEFAULT_MINIMUM_FIXED_BUDGET = 250;
+export const DEFAULT_MAXIMUM_FIXED_BUDGET = 50000;
+export const DEFAULT_MINIMUM_HOURLY_RATE = 15;
+export const DEFAULT_MAXIMUM_HOURLY_RATE = 100;
 export const projectTypeSchema = z.enum(['fixed', 'hourly']);
 export type ProjectType = z.infer<typeof projectTypeSchema>;
 export const searchProfileSchema = z.object({
@@ -16,10 +20,10 @@ export const searchProfileSchema = z.object({
   currencies: z.array(z.string().min(3)).default([]),
   languages: z.array(z.string().min(2)).default([]),
   projectTypes: z.array(projectTypeSchema).default(['fixed', 'hourly']),
-  minimumFixedBudget: z.number().nonnegative().nullable().optional(),
-  maximumFixedBudget: z.number().nonnegative().nullable().optional(),
-  minimumHourlyRate: z.number().nonnegative().nullable().optional(),
-  maximumHourlyRate: z.number().nonnegative().nullable().optional(),
+  minimumFixedBudget: z.number().nonnegative().nullable().default(DEFAULT_MINIMUM_FIXED_BUDGET),
+  maximumFixedBudget: z.number().nonnegative().nullable().default(DEFAULT_MAXIMUM_FIXED_BUDGET),
+  minimumHourlyRate: z.number().nonnegative().nullable().default(DEFAULT_MINIMUM_HOURLY_RATE),
+  maximumHourlyRate: z.number().nonnegative().nullable().default(DEFAULT_MAXIMUM_HOURLY_RATE),
   maximumBidCount: z.number().int().nonnegative().nullable().optional(),
   pollIntervalSeconds: z
     .number()

@@ -615,10 +615,10 @@ describe('freelancer project normalization and matching', () => {
     ).toBe(true);
   });
 
-  it('does not use normalized skill names as a keyword fallback', () => {
+  it('uses configured skill-name aliases when Freelancer job IDs differ', () => {
     expect(
-      projectSkipReason(
-        { ...activeProfile, keywords: ['Next JS'], jobIds: [500] },
+      projectMatches(
+        { ...activeProfile, keywords: [], jobIds: [2376] },
         {
           ...realisticProject,
           title: 'Unrelated',
@@ -626,7 +626,7 @@ describe('freelancer project normalization and matching', () => {
           jobs: [{ id: 1, name: 'Next.js' }],
         },
       ),
-    ).toBe('jobMismatch');
+    ).toBe(true);
   });
 
   it('continues applying filters after relevance matching', () => {
@@ -636,6 +636,99 @@ describe('freelancer project normalization and matching', () => {
         { ...realisticProject, clientCountryCode: 'us', jobs: [{ id: 500, name: 'Node.js' }] },
       ),
     ).toBe('currencyMismatch');
+  });
+
+  it('matches the missed Australia AUD fixed-budget HTML notification scenario', () => {
+    const project: NormalizedProject = {
+      id: 40579999,
+      title: 'Merge Claude Accounts',
+      type: 'fixed',
+      status: 'active',
+      frontendProjectStatus: 'open',
+      timeSubmitted: Math.floor(Date.now() / 1000),
+      jobs: [
+        { id: 3, name: 'PHP' },
+        { id: 335, name: 'HTML' },
+        { id: 38, name: 'MySQL' },
+      ],
+      clientCountryCode: 'au',
+      clientCountry: 'Australia',
+      currency: { code: 'AUD' },
+      budget: { minimum: 250, maximum: 750 },
+      local: false,
+    };
+    const profile: ProjectFilterProfile = {
+      ...activeProfile,
+      keywords: [],
+      jobIds: [335],
+      countries: ['Australia'],
+      currencies: ['AUD'],
+      languages: [],
+      minimumFixedBudget: 250,
+      maximumFixedBudget: 50000,
+      minimumHourlyRate: 15,
+      maximumHourlyRate: 100,
+      allowLocalProjects: false,
+    };
+
+    expect(projectSkipReason(profile, project)).toBeUndefined();
+    const payload = buildDetectedProjectCreatePayload(
+      { ...profile, _id: new Types.ObjectId() } as SearchProfileDocument,
+      project,
+    );
+    expect(payload.title).toBe('Merge Claude Accounts');
+    expect(payload.currency).toBe('AUD');
+    expect(payload.budgetMinimum).toBe(250);
+    expect(payload.budgetMaximum).toBe(750);
+  });
+
+  it('applies fixed and hourly budget boundaries inclusively', () => {
+    const profile = {
+      ...activeProfile,
+      minimumFixedBudget: 250,
+      maximumFixedBudget: 50000,
+      minimumHourlyRate: 15,
+      maximumHourlyRate: 100,
+    };
+
+    expect(
+      projectSkipReason(profile, {
+        ...realisticProject,
+        type: 'fixed',
+        budget: { minimum: 250, maximum: 250 },
+      }),
+    ).toBeUndefined();
+    expect(
+      projectSkipReason(profile, {
+        ...realisticProject,
+        type: 'fixed',
+        budget: { minimum: 50000, maximum: 50000 },
+      }),
+    ).toBeUndefined();
+    expect(
+      projectSkipReason(profile, { ...realisticProject, type: 'fixed', budget: { maximum: 249 } }),
+    ).toBe('fixedBudgetMismatch');
+    expect(
+      projectSkipReason(profile, {
+        ...realisticProject,
+        type: 'fixed',
+        budget: { minimum: 50001 },
+      }),
+    ).toBe('fixedBudgetMismatch');
+    expect(
+      projectSkipReason(profile, {
+        ...realisticProject,
+        type: 'hourly',
+        budget: { minimum: 15, maximum: 100 },
+      }),
+    ).toBeUndefined();
+    expect(
+      projectSkipReason(profile, {
+        ...realisticProject,
+        type: 'hourly',
+        budget: { minimum: 101, maximum: 101 },
+      }),
+    ).toBe('hourlyRateMismatch');
   });
 
   it('passes the mocked realistic React project through the matcher', () => {
@@ -698,10 +791,10 @@ describe('mongoose payload builders', () => {
 
       languages: [],
       projectTypes: ['fixed', 'hourly'],
-      minimumFixedBudget: null,
-      maximumFixedBudget: null,
-      minimumHourlyRate: null,
-      maximumHourlyRate: null,
+      minimumFixedBudget: 250,
+      maximumFixedBudget: 50000,
+      minimumHourlyRate: 15,
+      maximumHourlyRate: 100,
       pollIntervalSeconds: 30,
       maximumProjectAgeMinutes: 720,
       notificationEnabled: true,
@@ -721,6 +814,10 @@ describe('mongoose payload builders', () => {
   it('omits undefined optional search profile values while preserving null and numbers', () => {
     const omitted = buildSearchProfileCreatePayload({ name: 'Omitted' });
     expect(Object.hasOwn(omitted, 'maximumBidCount')).toBe(false);
+    expect(omitted.minimumFixedBudget).toBe(250);
+    expect(omitted.maximumFixedBudget).toBe(50000);
+    expect(omitted.minimumHourlyRate).toBe(15);
+    expect(omitted.maximumHourlyRate).toBe(100);
     const explicitNull = buildSearchProfileCreatePayload({ name: 'Nulls', maximumBidCount: null });
     expect(explicitNull.maximumBidCount).toBeNull();
     const populated = buildSearchProfileCreatePayload({

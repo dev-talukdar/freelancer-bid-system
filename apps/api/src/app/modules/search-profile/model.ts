@@ -1,5 +1,12 @@
 import { Schema, model, type InferSchemaType, type Types } from 'mongoose';
-import { DEFAULT_MAXIMUM_PROJECT_AGE_MINUTES, DEFAULT_POLL_INTERVAL_SECONDS } from '@fbs/shared';
+import {
+  DEFAULT_MAXIMUM_FIXED_BUDGET,
+  DEFAULT_MAXIMUM_HOURLY_RATE,
+  DEFAULT_MAXIMUM_PROJECT_AGE_MINUTES,
+  DEFAULT_MINIMUM_FIXED_BUDGET,
+  DEFAULT_MINIMUM_HOURLY_RATE,
+  DEFAULT_POLL_INTERVAL_SECONDS,
+} from '@fbs/shared';
 const schema = new Schema(
   {
     name: { type: String, required: true },
@@ -11,10 +18,10 @@ const schema = new Schema(
     currencies: { type: [String], default: [] },
     languages: { type: [String], default: [] },
     projectTypes: { type: [String], enum: ['fixed', 'hourly'], default: ['fixed', 'hourly'] },
-    minimumFixedBudget: { type: Number, default: null },
-    maximumFixedBudget: { type: Number, default: null },
-    minimumHourlyRate: { type: Number, default: null },
-    maximumHourlyRate: { type: Number, default: null },
+    minimumFixedBudget: { type: Number, default: DEFAULT_MINIMUM_FIXED_BUDGET, min: 0 },
+    maximumFixedBudget: { type: Number, default: DEFAULT_MAXIMUM_FIXED_BUDGET, min: 0 },
+    minimumHourlyRate: { type: Number, default: DEFAULT_MINIMUM_HOURLY_RATE, min: 0 },
+    maximumHourlyRate: { type: Number, default: DEFAULT_MAXIMUM_HOURLY_RATE, min: 0 },
     maximumBidCount: { type: Number, default: null },
     pollIntervalSeconds: { type: Number, default: DEFAULT_POLL_INTERVAL_SECONDS, min: 20 },
     notificationEnabled: { type: Boolean, default: true },

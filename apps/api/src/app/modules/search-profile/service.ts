@@ -1,5 +1,12 @@
 /* eslint-disable @typescript-eslint/require-await */
-import { searchProfileSchema, type SearchProfileInput } from '@fbs/shared';
+import {
+  DEFAULT_MAXIMUM_FIXED_BUDGET,
+  DEFAULT_MAXIMUM_HOURLY_RATE,
+  DEFAULT_MINIMUM_FIXED_BUDGET,
+  DEFAULT_MINIMUM_HOURLY_RATE,
+  searchProfileSchema,
+  type SearchProfileInput,
+} from '@fbs/shared';
 
 import { SearchProfileModel } from './model.js';
 
@@ -18,10 +25,10 @@ interface SearchProfileCreatePayload {
   soundEnabled: boolean;
   allowLocalProjects: boolean;
   maximumProjectAgeMinutes: number;
-  minimumFixedBudget?: number | null;
-  maximumFixedBudget?: number | null;
-  minimumHourlyRate?: number | null;
-  maximumHourlyRate?: number | null;
+  minimumFixedBudget?: number;
+  maximumFixedBudget?: number;
+  minimumHourlyRate?: number;
+  maximumHourlyRate?: number;
   maximumBidCount?: number | null;
 }
 
@@ -86,6 +93,13 @@ export const TARGET_CURRENCY_CODES = ['USD', 'GBP', 'EUR', 'AUD', 'NZD', 'CAD'] 
 
 const targetSkillIds = (): number[] => [...TARGET_SKILL_IDS];
 
+const requiredBudgetDefaults = {
+  minimumFixedBudget: DEFAULT_MINIMUM_FIXED_BUDGET,
+  maximumFixedBudget: DEFAULT_MAXIMUM_FIXED_BUDGET,
+  minimumHourlyRate: DEFAULT_MINIMUM_HOURLY_RATE,
+  maximumHourlyRate: DEFAULT_MAXIMUM_HOURLY_RATE,
+} as const;
+
 export const syncActiveProfileTargetSkillIds = async (): Promise<boolean> => false;
 export const clearLegacyDefaultCountryFilters = async (): Promise<boolean> => {
   // Country is now a required notification gate, so startup must not silently remove
@@ -113,12 +127,12 @@ export const buildSearchProfileCreatePayload = (input: unknown): SearchProfileCr
     maximumProjectAgeMinutes: parsed.maximumProjectAgeMinutes,
   };
 
-  if (parsed.minimumFixedBudget !== undefined)
-    payload.minimumFixedBudget = parsed.minimumFixedBudget;
-  if (parsed.maximumFixedBudget !== undefined)
-    payload.maximumFixedBudget = parsed.maximumFixedBudget;
-  if (parsed.minimumHourlyRate !== undefined) payload.minimumHourlyRate = parsed.minimumHourlyRate;
-  if (parsed.maximumHourlyRate !== undefined) payload.maximumHourlyRate = parsed.maximumHourlyRate;
+  payload.minimumFixedBudget =
+    parsed.minimumFixedBudget ?? requiredBudgetDefaults.minimumFixedBudget;
+  payload.maximumFixedBudget =
+    parsed.maximumFixedBudget ?? requiredBudgetDefaults.maximumFixedBudget;
+  payload.minimumHourlyRate = parsed.minimumHourlyRate ?? requiredBudgetDefaults.minimumHourlyRate;
+  payload.maximumHourlyRate = parsed.maximumHourlyRate ?? requiredBudgetDefaults.maximumHourlyRate;
   if (parsed.maximumBidCount !== undefined) payload.maximumBidCount = parsed.maximumBidCount;
 
   return payload;
@@ -186,19 +200,23 @@ export const buildSearchProfileUpdatePayload = (input: unknown): SearchProfileUp
   }
 
   if (parsed.minimumFixedBudget !== undefined) {
-    payload.minimumFixedBudget = parsed.minimumFixedBudget ?? null;
+    payload.minimumFixedBudget =
+      parsed.minimumFixedBudget ?? requiredBudgetDefaults.minimumFixedBudget;
   }
 
   if (parsed.maximumFixedBudget !== undefined) {
-    payload.maximumFixedBudget = parsed.maximumFixedBudget ?? null;
+    payload.maximumFixedBudget =
+      parsed.maximumFixedBudget ?? requiredBudgetDefaults.maximumFixedBudget;
   }
 
   if (parsed.minimumHourlyRate !== undefined) {
-    payload.minimumHourlyRate = parsed.minimumHourlyRate ?? null;
+    payload.minimumHourlyRate =
+      parsed.minimumHourlyRate ?? requiredBudgetDefaults.minimumHourlyRate;
   }
 
   if (parsed.maximumHourlyRate !== undefined) {
-    payload.maximumHourlyRate = parsed.maximumHourlyRate ?? null;
+    payload.maximumHourlyRate =
+      parsed.maximumHourlyRate ?? requiredBudgetDefaults.maximumHourlyRate;
   }
 
   if (parsed.maximumBidCount !== undefined) {
@@ -225,10 +243,10 @@ export const seedSearchProfile = async (): Promise<void> => {
       currencies: [...TARGET_CURRENCY_CODES],
       languages: [],
       projectTypes: ['fixed', 'hourly'],
-      minimumFixedBudget: null,
-      maximumFixedBudget: null,
-      minimumHourlyRate: null,
-      maximumHourlyRate: null,
+      minimumFixedBudget: requiredBudgetDefaults.minimumFixedBudget,
+      maximumFixedBudget: requiredBudgetDefaults.maximumFixedBudget,
+      minimumHourlyRate: requiredBudgetDefaults.minimumHourlyRate,
+      maximumHourlyRate: requiredBudgetDefaults.maximumHourlyRate,
       pollIntervalSeconds: 30,
       maximumProjectAgeMinutes: 720,
       notificationEnabled: true,
@@ -280,6 +298,43 @@ export const activateProfile = async (id: string) => {
       runValidators: true,
     },
   ).lean();
+};
+
+export const enforceActiveProfileBudgetDefaults = async (): Promise<boolean> => {
+  const result = await SearchProfileModel.updateMany(
+    {
+      $or: [
+        { minimumFixedBudget: null },
+        { minimumFixedBudget: { $exists: false } },
+        { maximumFixedBudget: null },
+        { maximumFixedBudget: { $exists: false } },
+        { minimumHourlyRate: null },
+        { minimumHourlyRate: { $exists: false } },
+        { maximumHourlyRate: null },
+        { maximumHourlyRate: { $exists: false } },
+      ],
+    },
+    [
+      {
+        $set: {
+          minimumFixedBudget: {
+            $ifNull: ['$minimumFixedBudget', requiredBudgetDefaults.minimumFixedBudget],
+          },
+          maximumFixedBudget: {
+            $ifNull: ['$maximumFixedBudget', requiredBudgetDefaults.maximumFixedBudget],
+          },
+          minimumHourlyRate: {
+            $ifNull: ['$minimumHourlyRate', requiredBudgetDefaults.minimumHourlyRate],
+          },
+          maximumHourlyRate: {
+            $ifNull: ['$maximumHourlyRate', requiredBudgetDefaults.maximumHourlyRate],
+          },
+        },
+      },
+    ],
+  );
+
+  return result.modifiedCount > 0;
 };
 
 export const getActiveProfile = () =>
