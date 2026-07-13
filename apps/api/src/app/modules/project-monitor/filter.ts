@@ -250,8 +250,12 @@ export function projectSkipReason(
   const profileCountries = profile.countries.flatMap(countryTokens);
   const clientCountries = [project.clientCountryCode, project.clientCountry].flatMap(countryTokens);
 
+  // Freelancer sometimes returns projects from an upstream country-filtered search without
+  // country details. In that case, do not reject the project locally: only reject when the
+  // response gives a concrete country/code that is outside the profile countries.
   const matchesCountry =
     profileCountries.length === 0 ||
+    clientCountries.length === 0 ||
     clientCountries.some((clientCountry) => profileCountries.includes(clientCountry));
   if (!matchesCountry) return 'countryMismatch';
 

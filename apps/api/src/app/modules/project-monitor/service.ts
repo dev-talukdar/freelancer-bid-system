@@ -160,6 +160,9 @@ export function buildMonitorSearchParams(profile: SearchProfileDocument): Projec
   if (profile.projectTypes.length > 0) params.project_types = profile.projectTypes;
   // Keep upstream search intentionally broad. Freelancer's public website and API do not
   // always apply skill/country/language arrays with the same semantics, so applying these
+  if (profile.countries.length > 0) params.countries = profile.countries;
+  // Keep the remaining upstream search intentionally broad. Freelancer's public website and API do not
+  // always apply skill/language arrays with the same semantics, so applying these
   // filters only locally prevents valid fresh projects from being excluded before detection.
   // Do not send minimumFixedBudget as Freelancer's min_price because it filters by the
   // project's displayed lower bound. A $50-$500 project should still be considered
