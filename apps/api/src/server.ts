@@ -4,6 +4,7 @@ import { logger } from './app/config/logger.js';
 import { connectMongo, disconnectMongo } from './app/db/mongoose.js';
 import {
   clearLegacyDefaultCountryFilters,
+  enforceActiveProfileBudgetDefaults,
   seedSearchProfile,
 } from './app/modules/search-profile/service.js';
 import { monitor } from './app/modules/project-monitor/service.js';
@@ -15,6 +16,7 @@ process.on('uncaughtException', (e) => {
 await connectMongo();
 await seedSearchProfile();
 await clearLegacyDefaultCountryFilters();
+await enforceActiveProfileBudgetDefaults();
 monitor.start();
 const server = buildApp().listen(env.PORT, env.HOST, () => {
   console.log(`Server is running on port ${env.PORT}`);

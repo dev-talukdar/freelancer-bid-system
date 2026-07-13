@@ -109,6 +109,25 @@ const COUNTRY_ALIAS_GROUPS = [
   ['us', 'united states', 'united states of america', 'usa', 'u s a', 'america'],
 ] as const;
 
+const SKILL_NAME_ALIAS_GROUPS = [
+  ['9', 'javascript', 'java script'],
+  ['335', 'html'],
+  ['500', 'nodejs', 'node js', 'node'],
+  ['1088', 'full stack development', 'fullstack development'],
+  ['1827', 'website build'],
+  ['2839', 'website development'],
+  ['1031', 'web development'],
+  ['759', 'reactjs', 'react js', 'react'],
+  ['1092', 'backend development', 'back end development'],
+  ['1093', 'frontend development', 'front end development'],
+  ['2376', 'nextjs', 'next js', 'next'],
+  ['2382', 'web application'],
+  ['979', 'typescript', 'type script'],
+] as const;
+
+const skillNameTokensForJobId = (jobId: number): string[] =>
+  SKILL_NAME_ALIAS_GROUPS.find((group) => group[0] === String(jobId))?.slice(1) ?? [];
+
 const CURRENCY_ALIAS_GROUPS = [
   ['usd', 'us dollar', 'us dollars'],
   ['gbp', 'pound', 'pounds', 'british pound', 'british pounds'],
@@ -218,7 +237,16 @@ export function projectSkipReason(
   if (excludedKeywordMatch) return 'excludedKeyword';
 
   const hasJobFilters = profile.jobIds.length > 0;
-  const jobMatch = hasJobFilters && projectSkillIds.some((jobId) => profile.jobIds.includes(jobId));
+  const configuredSkillNameTokens = profile.jobIds.flatMap(skillNameTokensForJobId);
+  const jobIdMatch =
+    hasJobFilters && projectSkillIds.some((jobId) => profile.jobIds.includes(jobId));
+  const jobNameMatch =
+    hasJobFilters &&
+    configuredSkillNameTokens.length > 0 &&
+    projectSkillNames.some((skillName) =>
+      configuredSkillNameTokens.some((skillToken) => includesNormalized(skillName, skillToken)),
+    );
+  const jobMatch = jobIdMatch || jobNameMatch;
 
   // Notifications must be based on an explicit skill-ID match. Keyword matching is kept
   // out of the notification gate so a text match cannot bypass preferred skills.
@@ -233,6 +261,8 @@ export function projectSkipReason(
         projectSkillNames: project.jobs.map((job) => job.name),
         configuredJobIds: profile.jobIds,
         keywordMatch,
+        jobIdMatch,
+        jobNameMatch,
         jobMatch,
         reason: 'jobMismatch',
       },
