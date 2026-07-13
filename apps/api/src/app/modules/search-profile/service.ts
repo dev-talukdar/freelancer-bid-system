@@ -57,6 +57,20 @@ export const TARGET_COUNTRY_CODES = [
   'sg',
   'pt',
   'se',
+  'kw',
+  'qa',
+  'ae',
+  'no',
+  'lu',
+  'th',
+  'dk',
+  'at',
+  'bh',
+  'lt',
+  'jp',
+  'hr',
+  'ee',
+  'ro',
   'ch',
   'pl',
   'be',
@@ -69,6 +83,32 @@ export const TARGET_COUNTRY_CODES = [
 ] as const;
 
 const targetSkillIds = (): number[] => [...TARGET_SKILL_IDS];
+const targetCountryCodes = (): string[] => [...TARGET_COUNTRY_CODES];
+const LEGACY_CLEARED_COUNTRY_CODES = [
+  'tw',
+  'hk',
+  'nz',
+  'il',
+  'sa',
+  'nl',
+  'gr',
+  'es',
+  'it',
+  'ie',
+  'sg',
+  'pt',
+  'se',
+  'ch',
+  'pl',
+  'be',
+  'fr',
+  'de',
+  'gb',
+  'au',
+  'ca',
+  'us',
+] as const;
+
 const sameStringSet = (left: string[], right: readonly string[]): boolean => {
   const normalizedLeft = new Set(left.map((value) => value.trim().toLowerCase()));
   const normalizedRight = new Set(right.map((value) => value.trim().toLowerCase()));
@@ -77,11 +117,17 @@ const sameStringSet = (left: string[], right: readonly string[]): boolean => {
 };
 
 export const syncActiveProfileTargetSkillIds = async (): Promise<boolean> => false;
-export const clearLegacyDefaultCountryFilters = async (): Promise<boolean> => {
+export const syncActiveProfileTargetCountryCodes = async (): Promise<boolean> => {
   const profile = await SearchProfileModel.findOne({ enabled: true }).sort({ updatedAt: -1 });
-  if (!profile || !sameStringSet(profile.countries, TARGET_COUNTRY_CODES)) return false;
+  if (!profile) return false;
 
-  profile.countries = [];
+  const shouldRestoreTargetCountries =
+    profile.countries.length === 0 ||
+    sameStringSet(profile.countries, LEGACY_CLEARED_COUNTRY_CODES);
+  if (!shouldRestoreTargetCountries || sameStringSet(profile.countries, TARGET_COUNTRY_CODES))
+    return false;
+
+  profile.countries = targetCountryCodes();
   await profile.save();
   return true;
 };
@@ -214,7 +260,7 @@ export const seedSearchProfile = async (): Promise<void> => {
       keywords: [],
       excludedKeywords: [],
       jobIds: targetSkillIds(),
-      countries: [],
+      countries: targetCountryCodes(),
       currencies: [],
       languages: [],
       projectTypes: ['fixed', 'hourly'],

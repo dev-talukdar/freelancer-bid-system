@@ -34,7 +34,7 @@ import {
   TARGET_COUNTRY_CODES,
   TARGET_SKILL_IDS,
   buildSearchProfileCreatePayload,
-  clearLegacyDefaultCountryFilters,
+  syncActiveProfileTargetCountryCodes,
   seedSearchProfile,
   syncActiveProfileTargetSkillIds,
 } from '../src/app/modules/search-profile/service.js';
@@ -575,19 +575,20 @@ describe('mongoose payload builders', () => {
     create.mockRestore();
   });
 
-  it('clears legacy broad default country filters that block most notifications', async () => {
+  it('restores target country filters for empty or legacy active profiles', async () => {
     const save = vi.fn();
-    const legacyProfile = { countries: [...TARGET_COUNTRY_CODES], save };
-    const sort = vi.fn().mockResolvedValue({ countries: ['US', 'ca', 'gb', 'au'], save });
+    const customProfile = { countries: ['US', 'ca', 'gb', 'au'], save };
+    const emptyProfile = { countries: [], save };
+    const sort = vi.fn().mockResolvedValue(customProfile);
     const findOne = vi.spyOn(SearchProfileModel, 'findOne').mockReturnValue({ sort } as never);
 
-    await expect(clearLegacyDefaultCountryFilters()).resolves.toBe(false);
+    await expect(syncActiveProfileTargetCountryCodes()).resolves.toBe(false);
     expect(save).not.toHaveBeenCalled();
 
-    sort.mockResolvedValue(legacyProfile);
+    sort.mockResolvedValue(emptyProfile);
 
-    await expect(clearLegacyDefaultCountryFilters()).resolves.toBe(true);
-    expect(legacyProfile.countries).toEqual([]);
+    await expect(syncActiveProfileTargetCountryCodes()).resolves.toBe(true);
+    expect(emptyProfile.countries).toEqual([...TARGET_COUNTRY_CODES]);
     expect(save).toHaveBeenCalledTimes(1);
 
     findOne.mockRestore();
@@ -600,7 +601,7 @@ describe('mongoose payload builders', () => {
       keywords: [],
       excludedKeywords: [],
       jobIds: [...TARGET_SKILL_IDS],
-      countries: [],
+      countries: [...TARGET_COUNTRY_CODES],
       currencies: [],
       languages: [],
       projectTypes: ['fixed', 'hourly'],
@@ -618,10 +619,18 @@ describe('mongoose payload builders', () => {
       projectMatches(payload, {
         ...realisticProject,
         language: undefined,
-        clientCountryCode: undefined,
+        clientCountryCode: 'us',
       }),
     ).toBe(true);
   });
+  expect(
+    projectMatches(payload, {
+      ...realisticProject,
+      language: undefined,
+      clientCountryCode: 'in',
+      clientCountry: 'India',
+    }),
+  ).toBe(false);
 
   it('omits undefined optional search profile values while preserving null and numbers', () => {
     const omitted = buildSearchProfileCreatePayload({ name: 'Omitted' });
