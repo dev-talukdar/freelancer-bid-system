@@ -140,7 +140,7 @@ export function buildMonitorSearchParams(profile: SearchProfileDocument): Projec
 
   const params: ProjectSearchParams = {
     from_time: fromTime,
-    sort_field: 'time_updated',
+    sort_field: 'time_submitted',
     reverse_sort: false,
     limit: 100,
     compact: true,
@@ -153,9 +153,9 @@ export function buildMonitorSearchParams(profile: SearchProfileDocument): Projec
   };
 
   if (profile.projectTypes.length > 0) params.project_types = profile.projectTypes;
-  if (profile.jobIds.length > 0) params.jobs = profile.jobIds;
-  if (profile.countries.length > 0) params.countries = profile.countries;
-  if (profile.languages.length > 0) params.languages = profile.languages;
+  // Keep upstream search intentionally broad. Freelancer's public website and API do not
+  // always apply skill/country/language arrays with the same semantics, so applying these
+  // filters only locally prevents valid fresh projects from being excluded before detection.
   // Do not send minimumFixedBudget as Freelancer's min_price because it filters by the
   // project's displayed lower bound. A $50-$500 project should still be considered
   // when the profile requires at least $250, because the local matcher compares that

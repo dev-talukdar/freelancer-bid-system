@@ -109,6 +109,24 @@ const COUNTRY_ALIAS_GROUPS = [
   ['us', 'united states', 'united states of america', 'usa', 'u s a', 'america'],
 ] as const;
 
+const CURRENCY_ALIAS_GROUPS = [
+  ['usd', 'us dollar', 'us dollars'],
+  ['gbp', 'pound', 'pounds', 'british pound', 'british pounds'],
+  ['eur', 'euro', 'euros', '€'],
+  ['aud', 'australian dollar', 'australian dollars'],
+  ['nzd', 'new zealand dollar', 'new zealand dollars'],
+  ['cad', 'canadian dollar', 'canadian dollars'],
+] as const;
+
+const currencyTokens = (value: string | undefined): string[] => {
+  if (value === undefined) return [];
+  const token = normalized(value);
+  const aliasGroup = CURRENCY_ALIAS_GROUPS.find((group) =>
+    (group as readonly string[]).includes(token),
+  );
+  return aliasGroup === undefined ? [token] : [...aliasGroup];
+};
+
 const countryTokens = (value: string | undefined): string[] => {
   if (value === undefined) return [];
   const token = normalized(value);
@@ -157,11 +175,7 @@ export function projectSubmissionDate(project: NormalizedProject): Date | undefi
 }
 
 export function projectActivityDate(project: NormalizedProject): Date | undefined {
-  const submittedAt = projectDateFromUnixTimestamp(project.timeSubmitted);
-  const updatedAt = projectDateFromUnixTimestamp(project.timeUpdated);
-  if (submittedAt === undefined) return updatedAt;
-  if (updatedAt === undefined) return submittedAt;
-  return updatedAt > submittedAt ? updatedAt : submittedAt;
+  return projectDateFromUnixTimestamp(project.timeSubmitted);
 }
 
 export function projectSkipReason(
@@ -241,11 +255,12 @@ export function projectSkipReason(
     clientCountries.some((clientCountry) => profileCountries.includes(clientCountry));
   if (!matchesCountry) return 'countryMismatch';
 
-  const profileCurrencies = profile.currencies.map(normalized);
+  const profileCurrencies = profile.currencies.flatMap(currencyTokens);
   const projectCurrency = project.currency?.code;
+  const projectCurrencies = currencyTokens(projectCurrency);
   const matchesCurrency =
     profileCurrencies.length === 0 ||
-    (projectCurrency !== undefined && profileCurrencies.includes(normalized(projectCurrency)));
+    projectCurrencies.some((currency) => profileCurrencies.includes(currency));
   if (!matchesCurrency) return 'currencyMismatch';
 
   const profileLanguages = profile.languages.map(normalized);

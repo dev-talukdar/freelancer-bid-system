@@ -84,6 +84,7 @@ export const TARGET_COUNTRY_CODES = [
 
 const targetSkillIds = (): number[] => [...TARGET_SKILL_IDS];
 const targetCountryCodes = (): string[] => [...TARGET_COUNTRY_CODES];
+const targetCurrencies = (): string[] => ['usd', 'gbp', 'eur', 'aud', 'nzd', 'cad'];
 const LEGACY_CLEARED_COUNTRY_CODES = [
   'tw',
   'hk',
@@ -261,7 +262,7 @@ export const seedSearchProfile = async (): Promise<void> => {
       excludedKeywords: [],
       jobIds: targetSkillIds(),
       countries: targetCountryCodes(),
-      currencies: [],
+      currencies: targetCurrencies(),
       languages: [],
       projectTypes: ['fixed', 'hourly'],
       minimumFixedBudget: null,
