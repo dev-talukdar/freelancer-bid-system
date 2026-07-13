@@ -8,13 +8,11 @@ import {
 } from './app/middleware/security.js';
 import { errorMiddleware } from './app/middleware/error.js';
 import { v1Router } from './app/routes/v1.js';
-import { httpLogger } from './app/middleware/http-logger.js';
 
 export function buildApp() {
   const app = express();
   app.use(express.json({ limit: '256kb' }));
   app.use(requestId);
-  app.use(httpLogger);
   app.use(securityHeaders);
   app.use(corsMiddleware);
   app.use(apiRateLimit);
