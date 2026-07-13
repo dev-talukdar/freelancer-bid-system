@@ -6,6 +6,17 @@ export interface FreelancerJob {
   seo_url?: string;
 }
 
+export interface FreelancerCountry {
+  name?: string;
+  code?: string;
+}
+
+export interface FreelancerUser {
+  id?: number;
+  location?: { country?: FreelancerCountry };
+  country?: FreelancerCountry;
+}
+
 export interface FreelancerProject {
   id: number;
   title: string;
@@ -28,9 +39,9 @@ export interface FreelancerProject {
   bid_stats?: { bid_count?: number; bid_avg?: number };
   jobs?: FreelancerJob[];
   upgrades?: Record<string, unknown>;
-  location?: { country?: { name?: string; code?: string } };
+  location?: { country?: FreelancerCountry };
   owner_id?: number;
-  owner?: { id?: number; username?: string };
+  owner?: FreelancerUser & { username?: string };
 }
 
 export interface NormalizedProjectJob {

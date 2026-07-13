@@ -8,11 +8,26 @@ import {
   type RateLimitState,
 } from './rate-limit.js';
 import { normalizeFreelancerProject } from './normalize.js';
-import type { FreelancerProject, ProjectSearchParams } from './types.js';
+import type { FreelancerProject, FreelancerUser, ProjectSearchParams } from './types.js';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const ACTIVE_PROJECTS_PATH = '/projects/0.1/projects/active/';
 const MAX_ACTIVE_PROJECT_PAGES = 3;
+
+interface ActiveProjectsResponseBody {
+  projects?: FreelancerProject[];
+  users?: Record<string, FreelancerUser>;
+}
+
+interface ActiveProjectsWrappedResponse {
+  result?: ActiveProjectsResponseBody;
+}
+
+type ActiveProjectsResponse = ActiveProjectsWrappedResponse | ActiveProjectsResponseBody;
+
+const isWrappedActiveProjectsResponse = (
+  response: ActiveProjectsResponse,
+): response is ActiveProjectsWrappedResponse => Object.hasOwn(response, 'result');
 
 export class FreelancerClient {
   public rateLimitState: RateLimitState = { windows: [] };
@@ -67,21 +82,32 @@ export class FreelancerClient {
   async activeProjects(params: ProjectSearchParams) {
     const pageSize = params.limit ?? 100;
     const startOffset = params.offset ?? 0;
-    const projects: FreelancerProject[] = [];
+    const projects: Array<{ project: FreelancerProject; owner: FreelancerUser | undefined }> = [];
 
     for (let page = 0; page < MAX_ACTIVE_PROJECT_PAGES; page++) {
       const pageParams = { ...params, limit: pageSize, offset: startOffset + page * pageSize };
-      const data = await this.get<
-        { result?: { projects?: FreelancerProject[] } } | { projects?: FreelancerProject[] }
-      >(ACTIVE_PROJECTS_PATH, buildFreelancerQuery(pageParams));
-      const pageProjects =
-        ('result' in data
-          ? data.result?.projects
-          : (data as { projects?: FreelancerProject[] }).projects) ?? [];
-      projects.push(...pageProjects);
+      const data = await this.get<ActiveProjectsResponse>(
+        ACTIVE_PROJECTS_PATH,
+        buildFreelancerQuery(pageParams),
+      );
+      const responseBody: ActiveProjectsResponseBody | undefined = isWrappedActiveProjectsResponse(
+        data,
+      )
+        ? data.result
+        : data;
+      const users = responseBody?.users;
+      const pageProjects = responseBody?.projects ?? [];
+      projects.push(
+        ...pageProjects.map((project) => {
+          const ownerId = project.owner_id ?? project.owner?.id;
+          const owner = ownerId === undefined ? undefined : users?.[String(ownerId)];
+          return { project, owner };
+        }),
+      );
+
       if (pageProjects.length < pageSize) break;
     }
 
-    return projects.map(normalizeFreelancerProject);
+    return projects.map(({ project, owner }) => normalizeFreelancerProject(project, owner));
   }
 }

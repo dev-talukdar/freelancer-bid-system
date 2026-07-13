@@ -215,6 +215,36 @@ describe('freelancer project normalization and matching', () => {
     expect(normalizeOptionalText('   ')).toBeUndefined();
   });
 
+  it('normalizes client country from owner user details when compact projects omit location', () => {
+    const normalized = normalizeFreelancerProject(
+      {
+        id: 40578441,
+        title: 'SEO GEO Monthly management',
+        type: 'fixed',
+        status: 'active',
+        frontend_project_status: 'open',
+        time_submitted: Math.floor(Date.now() / 1000),
+        jobs: [
+          { id: 9, name: 'JavaScript' },
+          { id: 335, name: 'HTML' },
+        ],
+        currency: { code: 'AUD' },
+        budget: { minimum: 30, maximum: 250 },
+        owner_id: 11,
+      },
+      { id: 11, location: { country: { code: 'au', name: 'Australia' } } },
+    );
+
+    expect(normalized?.clientCountryCode).toBe('au');
+    expect(normalized?.clientCountry).toBe('Australia');
+    expect(
+      projectMatches(
+        { ...activeProfile, jobIds: [9], countries: ['au'], currencies: ['AUD'], languages: [] },
+        normalized!,
+      ),
+    ).toBe(true);
+  });
+
   it('normalizes snake_case response fields and rejects unknown project types', () => {
     expect(normalizedRealisticProject.previewDescription).toBe('Build a React admin dashboard');
     expect(normalizedRealisticProject.frontendProjectStatus).toBe('open');
@@ -503,7 +533,7 @@ describe('freelancer project normalization and matching', () => {
         { ...activeProfile, keywords: ['dashboard'], jobIds: [500] },
         { ...realisticProject, title: 'Dashboard build', jobs: [{ id: 1, name: 'Other' }] },
       ),
-    ).toBe(true);
+    ).toBe('jobMismatch');
   });
 
   it('rejects project when skill ID misses even if keyword matches description', () => {
@@ -741,6 +771,44 @@ describe('freelancer client pagination', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain('reverse_sort=false');
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain('from_time=1');
+    vi.unstubAllGlobals();
+  });
+
+  it('enriches active projects with owner country details from the users response map', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      json: () =>
+        Promise.resolve({
+          result: {
+            projects: [
+              {
+                id: 40578438,
+                title: 'Empowerment Referral Platform Development',
+                type: 'fixed',
+                status: 'active',
+                time_submitted: Math.floor(Date.now() / 1000),
+                owner_id: 22,
+                jobs: [
+                  { id: 9, name: 'JavaScript' },
+                  { id: 335, name: 'HTML' },
+                ],
+                currency: { code: 'USD' },
+              },
+            ],
+            users: {
+              '22': { id: 22, location: { country: { code: 'us', name: 'United States' } } },
+            },
+          },
+        }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new FreelancerClient('token', 'https://www.freelancer.com/api');
+
+    const projects = await client.activeProjects({ limit: 2 });
+
+    expect(projects[0]?.clientCountryCode).toBe('us');
+    expect(projects[0]?.clientCountry).toBe('United States');
     vi.unstubAllGlobals();
   });
 

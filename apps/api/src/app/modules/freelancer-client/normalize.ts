@@ -1,4 +1,10 @@
-import type { FreelancerProject, KnownProjectType, NormalizedProject } from './types.js';
+import type {
+  FreelancerCountry,
+  FreelancerProject,
+  FreelancerUser,
+  KnownProjectType,
+  NormalizedProject,
+} from './types.js';
 
 const toKnownProjectType = (value: string | undefined): KnownProjectType | undefined => {
   if (value === 'fixed' || value === 'hourly') return value;
@@ -15,8 +21,25 @@ export const normalizeOptionalText = (value: string | undefined): string | undef
   return normalized || undefined;
 };
 
+const normalizeCountry = (
+  projectCountry: FreelancerCountry | undefined,
+  owner: FreelancerUser | undefined,
+): { name?: string; code?: string } => {
+  const ownerCountry = owner?.location?.country ?? owner?.country;
+  const country: { name?: string; code?: string } = {};
+
+  if (projectCountry?.name !== undefined) country.name = projectCountry.name;
+  else if (ownerCountry?.name !== undefined) country.name = ownerCountry.name;
+
+  const countryCode = normalizeOptionalText(projectCountry?.code ?? ownerCountry?.code);
+  if (countryCode !== undefined) country.code = countryCode;
+
+  return country;
+};
+
 export function normalizeFreelancerProject(
   project: FreelancerProject,
+  owner?: FreelancerUser,
 ): NormalizedProject | undefined {
   const type = toKnownProjectType(normalizeOptionalText(project.type));
   const title = typeof project.title === 'string' ? project.title.trim() : undefined;
@@ -78,11 +101,9 @@ export function normalizeFreelancerProject(
     normalized.bidStats = bidStats;
   }
 
-  if (project.location?.country?.name !== undefined)
-    normalized.clientCountry = project.location.country.name;
-
-  const clientCountryCode = normalizeOptionalText(project.location?.country?.code);
-  if (clientCountryCode !== undefined) normalized.clientCountryCode = clientCountryCode;
+  const country = normalizeCountry(project.location?.country, owner ?? project.owner);
+  if (country.name !== undefined) normalized.clientCountry = country.name;
+  if (country.code !== undefined) normalized.clientCountryCode = country.code;
 
   const ownerId = project.owner_id ?? project.owner?.id;
   if (ownerId !== undefined) normalized.ownerId = ownerId;
