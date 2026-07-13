@@ -127,6 +127,13 @@ const unixSecondsNow = () => Math.floor(Date.now() / 1000);
 const hasFiniteNumber = (value: number | null | undefined): value is number =>
   typeof value === 'number' && Number.isFinite(value);
 
+const DEFAULT_FIXED_BUDGET_MAX_PRICE = 50_000;
+
+const fixedBudgetMaxPrice = (profile: SearchProfileDocument): number =>
+  hasFiniteNumber(profile.maximumFixedBudget)
+    ? Math.min(profile.maximumFixedBudget, DEFAULT_FIXED_BUDGET_MAX_PRICE)
+    : DEFAULT_FIXED_BUDGET_MAX_PRICE;
+
 export function buildMonitorSearchParams(profile: SearchProfileDocument): ProjectSearchParams {
   const maximumProjectAgeMinutes = profile.maximumProjectAgeMinutes ?? 10;
   const fromTime = unixSecondsNow() - maximumProjectAgeMinutes * 60;
@@ -149,8 +156,15 @@ export function buildMonitorSearchParams(profile: SearchProfileDocument): Projec
   if (profile.jobIds.length > 0) params.jobs = profile.jobIds;
   if (profile.countries.length > 0) params.countries = profile.countries;
   if (profile.languages.length > 0) params.languages = profile.languages;
-  if (hasFiniteNumber(profile.minimumFixedBudget)) params.min_price = profile.minimumFixedBudget;
-  if (hasFiniteNumber(profile.maximumFixedBudget)) params.max_price = profile.maximumFixedBudget;
+  // Do not send minimumFixedBudget as Freelancer's min_price because it filters by the
+  // project's displayed lower bound. A $50-$500 project should still be considered
+  // when the profile requires at least $250, because the local matcher compares that
+  // threshold against the project's maximum budget. Keep the upstream fixed-budget
+  // search broad enough to include max budgets from the profile minimum through 50k.
+  if (profile.projectTypes.length === 0 || profile.projectTypes.includes('fixed')) {
+    params.max_price = fixedBudgetMaxPrice(profile);
+  }
+
   if (hasFiniteNumber(profile.minimumHourlyRate))
     params.min_hourly_rate = profile.minimumHourlyRate;
   if (hasFiniteNumber(profile.maximumHourlyRate))
