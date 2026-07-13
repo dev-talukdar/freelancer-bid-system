@@ -118,6 +118,16 @@ const sameStringSet = (left: string[], right: readonly string[]): boolean => {
 };
 
 export const syncActiveProfileTargetSkillIds = async (): Promise<boolean> => false;
+
+export const syncActiveProfileTargetCurrencies = async (): Promise<boolean> => {
+  const profile = await SearchProfileModel.findOne({ enabled: true }).sort({ updatedAt: -1 });
+  if (!profile || profile.currencies.length > 0) return false;
+
+  profile.currencies = targetCurrencies();
+  await profile.save();
+  return true;
+};
+
 export const syncActiveProfileTargetCountryCodes = async (): Promise<boolean> => {
   const profile = await SearchProfileModel.findOne({ enabled: true }).sort({ updatedAt: -1 });
   if (!profile) return false;

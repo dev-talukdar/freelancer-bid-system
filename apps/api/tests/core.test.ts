@@ -37,6 +37,7 @@ import {
   syncActiveProfileTargetCountryCodes,
   seedSearchProfile,
   syncActiveProfileTargetSkillIds,
+  syncActiveProfileTargetCurrencies,
 } from '../src/app/modules/search-profile/service.js';
 import {
   buildDetectedProjectCreatePayload,
@@ -602,6 +603,25 @@ describe('mongoose payload builders', () => {
 
     await expect(syncActiveProfileTargetCountryCodes()).resolves.toBe(true);
     expect(emptyProfile.countries).toEqual([...TARGET_COUNTRY_CODES]);
+    expect(save).toHaveBeenCalledTimes(1);
+
+    findOne.mockRestore();
+  });
+
+  it('restores target currency filters for empty active profiles', async () => {
+    const save = vi.fn();
+    const emptyCurrencyProfile = { currencies: [], save };
+    const populatedCurrencyProfile = { currencies: ['usd'], save: vi.fn() };
+    const sort = vi.fn().mockResolvedValue(populatedCurrencyProfile);
+    const findOne = vi.spyOn(SearchProfileModel, 'findOne').mockReturnValue({ sort } as never);
+
+    await expect(syncActiveProfileTargetCurrencies()).resolves.toBe(false);
+    expect(populatedCurrencyProfile.save).not.toHaveBeenCalled();
+
+    sort.mockResolvedValue(emptyCurrencyProfile);
+
+    await expect(syncActiveProfileTargetCurrencies()).resolves.toBe(true);
+    expect(emptyCurrencyProfile.currencies).toEqual(['usd', 'gbp', 'eur', 'aud', 'nzd', 'cad']);
     expect(save).toHaveBeenCalledTimes(1);
 
     findOne.mockRestore();
