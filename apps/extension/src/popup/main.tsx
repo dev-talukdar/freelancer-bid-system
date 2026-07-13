@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { DetectedProjectDto, HealthDto } from '@fbs/shared';
 import { toFreelancerProjectUrl } from '@fbs/shared';
-import { LocalApiClient } from '../services/local-api.js';
+import { LocalApiClient, LocalApiError } from '../services/local-api.js';
 import { getSettings, saveSettings } from '../storage/settings.js';
 import './style.css';
 import { ApiKeyStatus, buildPopupViewModel, MonitorStatus, trimSecret } from './view-model.js';
@@ -21,6 +21,16 @@ const statusTone = (status: MonitorStatus) =>
 const apiTone = (status: ApiKeyStatus) =>
   status === 'valid' ? 'green' : status === 'invalid' ? 'red' : 'amber';
 const titleCase = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
+
+const formatLoadError = (error: unknown) => {
+  if (error instanceof LocalApiError) {
+    if (error.kind === 'timeout') return 'Backend request timed out';
+    if (error.kind === 'unauthorized') return 'Invalid local API key';
+    if (error.kind === 'network') return 'Backend connection failed';
+  }
+
+  return error instanceof Error ? error.message : 'Failed to connect';
+};
 
 function StatusBadge({
   label,
@@ -148,9 +158,7 @@ function App() {
   };
 
   useEffect(() => {
-    void load().catch((e: unknown) =>
-      setError(e instanceof Error ? e.message : 'Failed to connect'),
-    );
+    void load().catch((e: unknown) => setError(formatLoadError(e)));
   }, []);
 
   useEffect(() => {
@@ -187,7 +195,7 @@ function App() {
       }
       await load();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Action failed');
+      setError(formatLoadError(e));
       setFeedback(action === 'poll' ? 'Poll failed' : 'Action failed');
     } finally {
       setIsPolling(false);

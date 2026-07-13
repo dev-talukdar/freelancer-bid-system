@@ -6,6 +6,7 @@ import type { RequestHandler } from 'express';
 import helmet from 'helmet';
 
 import { env } from '../config/env.js';
+import { logger } from '../config/logger.js';
 import { AppError } from '../error/app-error.js';
 
 export const requestId: RequestHandler = (_req, res, next) => {
@@ -52,13 +53,30 @@ export const corsMiddleware = cors({
 
 export const localApiKey: RequestHandler = (req, _res, next) => {
   if (req.path === '/api/v1/health') {
-    next();
-    return;
+    logger.info(
+      {
+        method: req.method,
+        path: req.path,
+        hasLocalApiKey: Boolean(req.header('X-Local-API-Key')),
+      },
+      'local API key middleware entered',
+    );
   }
 
   if (req.header('X-Local-API-Key') !== env.LOCAL_API_SECRET) {
     next(new AppError(401, 'Invalid local API key', 'INVALID_LOCAL_API_KEY'));
     return;
+  }
+
+  if (req.path === '/api/v1/health') {
+    logger.info(
+      {
+        method: req.method,
+        path: req.path,
+        hasLocalApiKey: true,
+      },
+      'local API key accepted',
+    );
   }
 
   next();

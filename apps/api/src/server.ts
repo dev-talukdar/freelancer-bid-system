@@ -8,25 +8,47 @@ import {
   syncActiveProfileTargetCurrencies,
 } from './app/modules/search-profile/service.js';
 import { monitor } from './app/modules/project-monitor/service.js';
+
+const bootstrap = async (): Promise<void> => {
+  await connectMongo();
+  await seedSearchProfile();
+  await syncActiveProfileTargetCountryCodes();
+  await syncActiveProfileTargetCurrencies();
+
+  const server = buildApp().listen(env.PORT, env.HOST, () => {
+    logger.info({ host: env.HOST, port: env.PORT }, 'api listening');
+    console.log(`Server is running on port ${env.PORT}`);
+    monitor.start();
+  });
+
+  server.requestTimeout = 15_000;
+  server.headersTimeout = 20_000;
+  server.on('clientError', (error, socket) => {
+    logger.error({ err: error }, 'http client error');
+
+    if (!socket.destroyed) {
+      socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
+    }
+  });
+
+  const shutdown = async () => {
+    monitor.stop();
+    server.close();
+    await disconnectMongo();
+    process.exit(0);
+  };
+
+  process.on('SIGTERM', () => void shutdown());
+  process.on('SIGINT', () => void shutdown());
+};
+
 process.on('unhandledRejection', (e) => logger.fatal({ err: e }, 'unhandled rejection'));
 process.on('uncaughtException', (e) => {
   logger.fatal({ err: e }, 'uncaught exception');
   process.exit(1);
 });
-await connectMongo();
-await seedSearchProfile();
-await syncActiveProfileTargetCountryCodes();
-await syncActiveProfileTargetCurrencies();
-monitor.start();
-const server = buildApp().listen(env.PORT, env.HOST, () => {
-  console.log(`Server is running on port ${env.PORT}`);
-});
 
-const shutdown = async () => {
-  monitor.stop();
-  server.close();
-  await disconnectMongo();
-  process.exit(0);
-};
-process.on('SIGTERM', () => void shutdown());
-process.on('SIGINT', () => void shutdown());
+void bootstrap().catch((error: unknown) => {
+  logger.fatal({ err: error }, 'server bootstrap failed');
+  process.exit(1);
+});
