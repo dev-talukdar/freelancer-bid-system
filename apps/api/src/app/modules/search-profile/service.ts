@@ -84,6 +84,7 @@ export const TARGET_COUNTRY_CODES = [
 
 const targetSkillIds = (): number[] => [...TARGET_SKILL_IDS];
 const targetCountryCodes = (): string[] => [...TARGET_COUNTRY_CODES];
+const targetCurrencies = (): string[] => ['usd', 'gbp', 'eur', 'aud', 'nzd', 'cad'];
 const LEGACY_CLEARED_COUNTRY_CODES = [
   'tw',
   'hk',
@@ -117,6 +118,16 @@ const sameStringSet = (left: string[], right: readonly string[]): boolean => {
 };
 
 export const syncActiveProfileTargetSkillIds = async (): Promise<boolean> => false;
+
+export const syncActiveProfileTargetCurrencies = async (): Promise<boolean> => {
+  const profile = await SearchProfileModel.findOne({ enabled: true }).sort({ updatedAt: -1 });
+  if (!profile || profile.currencies.length > 0) return false;
+
+  profile.currencies = targetCurrencies();
+  await profile.save();
+  return true;
+};
+
 export const syncActiveProfileTargetCountryCodes = async (): Promise<boolean> => {
   const profile = await SearchProfileModel.findOne({ enabled: true }).sort({ updatedAt: -1 });
   if (!profile) return false;
@@ -261,7 +272,7 @@ export const seedSearchProfile = async (): Promise<void> => {
       excludedKeywords: [],
       jobIds: targetSkillIds(),
       countries: targetCountryCodes(),
-      currencies: [],
+      currencies: targetCurrencies(),
       languages: [],
       projectTypes: ['fixed', 'hourly'],
       minimumFixedBudget: null,

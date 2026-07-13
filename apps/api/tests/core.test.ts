@@ -37,6 +37,7 @@ import {
   syncActiveProfileTargetCountryCodes,
   seedSearchProfile,
   syncActiveProfileTargetSkillIds,
+  syncActiveProfileTargetCurrencies,
 } from '../src/app/modules/search-profile/service.js';
 import {
   buildDetectedProjectCreatePayload,
@@ -123,13 +124,13 @@ describe('api foundations', () => {
     });
 
     const monitorQs = buildFreelancerQuery(params);
-    expect(monitorQs.get('sort_field')).toBe('time_updated');
+    expect(monitorQs.get('sort_field')).toBe('time_submitted');
     expect(monitorQs.get('reverse_sort')).toBe('false');
     expect(monitorQs.get('limit')).toBe('100');
     expect(monitorQs.get('from_time')).toBe(String(Math.floor(Date.now() / 1000) - 30 * 60));
-    expect(monitorQs.getAll('jobs[]')).toEqual(['9', '500']);
-    expect(monitorQs.getAll('countries[]')).toEqual(['us', 'gb']);
-    expect(monitorQs.getAll('languages[]')).toEqual(['en']);
+    expect(monitorQs.getAll('jobs[]')).toEqual([]);
+    expect(monitorQs.getAll('countries[]')).toEqual([]);
+    expect(monitorQs.getAll('languages[]')).toEqual([]);
     expect(monitorQs.get('min_price')).toBeNull();
     expect(monitorQs.get('max_price')).toBe('1000');
     expect(monitorQs.get('min_hourly_rate')).toBe('25');
@@ -373,7 +374,7 @@ describe('freelancer project normalization and matching', () => {
     expect(projectMatches(activeProfile, { ...realisticProject, local: true })).toBe(true);
   });
 
-  it('applies project recency filtering from timeSubmitted', () => {
+  it('applies project recency filtering from timeSubmitted only', () => {
     const now = Date.now();
     const nowSeconds = Math.floor(now / 1000);
     const profile: ProjectFilterProfile = {
@@ -400,7 +401,7 @@ describe('freelancer project normalization and matching', () => {
         timeSubmitted: nowSeconds - 11 * 60,
         timeUpdated: nowSeconds,
       }),
-    ).toBeUndefined();
+    ).toBe('tooOld');
     expect(
       projectSkipReason(profile, { ...base, timeSubmitted: undefined, timeUpdated: undefined }),
     ).toBe('invalidShape');
@@ -607,6 +608,25 @@ describe('mongoose payload builders', () => {
     findOne.mockRestore();
   });
 
+  it('restores target currency filters for empty active profiles', async () => {
+    const save = vi.fn();
+    const emptyCurrencyProfile = { currencies: [], save };
+    const populatedCurrencyProfile = { currencies: ['usd'], save: vi.fn() };
+    const sort = vi.fn().mockResolvedValue(populatedCurrencyProfile);
+    const findOne = vi.spyOn(SearchProfileModel, 'findOne').mockReturnValue({ sort } as never);
+
+    await expect(syncActiveProfileTargetCurrencies()).resolves.toBe(false);
+    expect(populatedCurrencyProfile.save).not.toHaveBeenCalled();
+
+    sort.mockResolvedValue(emptyCurrencyProfile);
+
+    await expect(syncActiveProfileTargetCurrencies()).resolves.toBe(true);
+    expect(emptyCurrencyProfile.currencies).toEqual(['usd', 'gbp', 'eur', 'aud', 'nzd', 'cad']);
+    expect(save).toHaveBeenCalledTimes(1);
+
+    findOne.mockRestore();
+  });
+
   it('seeds broad default profile filters for realistic notifications', () => {
     const payload = buildSearchProfileCreatePayload({
       name: 'Web development monitoring',
@@ -615,7 +635,7 @@ describe('mongoose payload builders', () => {
       excludedKeywords: [],
       jobIds: [...TARGET_SKILL_IDS],
       countries: [...TARGET_COUNTRY_CODES],
-      currencies: [],
+      currencies: ['usd', 'gbp', 'eur', 'aud', 'nzd', 'cad'],
       languages: [],
       projectTypes: ['fixed', 'hourly'],
       minimumFixedBudget: null,
