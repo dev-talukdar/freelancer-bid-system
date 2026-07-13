@@ -21,8 +21,10 @@ const bootstrap = async (): Promise<void> => {
     monitor.start();
   });
 
+  server.keepAliveTimeout = 5_000;
   server.requestTimeout = 15_000;
   server.headersTimeout = 20_000;
+
   server.on('clientError', (error, socket) => {
     logger.error({ err: error }, 'http client error');
 
@@ -31,15 +33,28 @@ const bootstrap = async (): Promise<void> => {
     }
   });
 
-  const shutdown = async () => {
+  const shutdown = async (signal: string): Promise<void> => {
+    logger.info({ signal }, 'shutdown started');
     monitor.stop();
-    server.close();
+
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      });
+    });
+
     await disconnectMongo();
+    logger.info('shutdown complete');
     process.exit(0);
   };
 
-  process.on('SIGTERM', () => void shutdown());
-  process.on('SIGINT', () => void shutdown());
+  process.on('SIGTERM', () => void shutdown('SIGTERM'));
+  process.on('SIGINT', () => void shutdown('SIGINT'));
 };
 
 process.on('unhandledRejection', (e) => logger.fatal({ err: e }, 'unhandled rejection'));

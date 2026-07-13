@@ -152,9 +152,28 @@ function App() {
       return;
     }
     const api = new LocalApiClient(settings);
-    setHealth(await api.health());
-    setProjects((await api.detected(false, 5)).items);
+    const nextHealth = await api.health();
+    setHealth(nextHealth);
     setError('');
+
+    if (nextHealth.database !== 'connected') {
+      setProjects([]);
+      return;
+    }
+
+    try {
+      const status = await api.status();
+      setHealth({ ...nextHealth, monitoring: status });
+    } catch (statusError) {
+      setError(`Monitor status unavailable: ${formatLoadError(statusError)}`);
+    }
+
+    try {
+      setProjects((await api.detected(false, 5)).items);
+    } catch (projectError) {
+      setProjects([]);
+      setError(`Recent projects unavailable: ${formatLoadError(projectError)}`);
+    }
   };
 
   useEffect(() => {

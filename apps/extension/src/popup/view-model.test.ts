@@ -54,9 +54,27 @@ describe('popup view model', () => {
     expect(vm.pollUnavailable).toBe(true);
   });
 
-  it('handles API key missing and invalid states', () => {
+  it('handles API key missing, invalid, and local-valid states', () => {
     expect(getApiKeyStatus('')).toBe('missing');
     expect(getApiKeyStatus('secret', undefined, 'Unauthorized API key')).toBe('invalid');
+    expect(getApiKeyStatus('secret', undefined, '')).toBe('valid');
+    expect(
+      getApiKeyStatus('secret', { ...health(false), freelancerTokenConfigured: false }, ''),
+    ).toBe('valid');
+  });
+
+  it('keeps backend connected when later project loading reports an error', () => {
+    const vm = buildPopupViewModel({
+      health: health(false),
+      secret: 'secret',
+      error: 'Recent projects unavailable: Backend request timed out',
+      isPolling: false,
+      actionPending: false,
+    });
+
+    expect(vm.backendConnected).toBe(true);
+    expect(vm.monitorStatus).toBe('stopped');
+    expect(vm.apiKeyStatus).toBe('valid');
   });
 
   it('handles database disconnected state without showing monitoring healthy', () => {

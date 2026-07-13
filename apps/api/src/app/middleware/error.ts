@@ -2,11 +2,33 @@ import type { ErrorRequestHandler } from 'express';
 import { ZodError } from 'zod';
 import { AppError } from '../error/app-error.js';
 
-export const errorMiddleware: ErrorRequestHandler = (err, req, res, next) => {
-  void req;
-  void next;
+export const errorMiddleware: ErrorRequestHandler = (error, _req, res, next): void => {
+  if (res.headersSent) {
+    next(error);
+    return;
+  }
+
   const requestId = res.locals.requestId as string | undefined;
-  if (err instanceof ZodError) return res.status(400).json({ success: false, message: 'Validation failed', errorCode: 'VALIDATION_ERROR', requestId });
-  if (err instanceof AppError) return res.status(err.statusCode).json({ success: false, message: err.message, errorCode: err.errorCode, requestId });
-  return res.status(500).json({ success: false, message: 'Internal server error', errorCode: 'INTERNAL_ERROR', requestId });
+
+  if (error instanceof ZodError) {
+    res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      errorCode: 'VALIDATION_ERROR',
+      requestId,
+    });
+    return;
+  }
+
+  const appError =
+    error instanceof AppError
+      ? error
+      : new AppError(500, 'Internal server error', 'INTERNAL_SERVER_ERROR');
+
+  res.status(appError.statusCode).json({
+    success: false,
+    message: appError.message,
+    errorCode: appError.errorCode,
+    requestId,
+  });
 };

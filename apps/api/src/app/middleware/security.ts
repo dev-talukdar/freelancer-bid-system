@@ -2,12 +2,31 @@ import crypto from 'node:crypto';
 
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
-import type { RequestHandler } from 'express';
+import type { Request, RequestHandler } from 'express';
 import helmet from 'helmet';
+import mongoose from 'mongoose';
 
 import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
 import { AppError } from '../error/app-error.js';
+
+const isHealthRequest = (req: Request): boolean => req.originalUrl === '/api/v1/health';
+
+const logHealthStage = (req: Request, stage: string, extra: Record<string, unknown> = {}): void => {
+  if (!isHealthRequest(req)) return;
+
+  logger.info(
+    {
+      method: req.method,
+      originalUrl: req.originalUrl,
+      path: req.path,
+      hasLocalApiKey: Boolean(req.header('X-Local-API-Key')),
+      mongooseReadyState: mongoose.connection.readyState,
+      ...extra,
+    },
+    stage,
+  );
+};
 
 export const requestId: RequestHandler = (_req, res, next) => {
   res.locals.requestId = crypto.randomUUID();
@@ -51,34 +70,18 @@ export const corsMiddleware = cors({
   allowedHeaders: ['Content-Type', 'X-Local-API-Key'],
 });
 
-export const localApiKey: RequestHandler = (req, _res, next) => {
-  if (req.path === '/api/v1/health') {
-    logger.info(
-      {
-        method: req.method,
-        path: req.path,
-        hasLocalApiKey: Boolean(req.header('X-Local-API-Key')),
-      },
-      'local API key middleware entered',
-    );
-  }
+export const localApiKey: RequestHandler = (req, _res, next): void => {
+  logHealthStage(req, 'local API key middleware entered');
 
-  if (req.header('X-Local-API-Key') !== env.LOCAL_API_SECRET) {
+  const providedKey = req.header('X-Local-API-Key');
+
+  if (!providedKey || providedKey !== env.LOCAL_API_SECRET) {
+    logHealthStage(req, 'local API key rejected');
     next(new AppError(401, 'Invalid local API key', 'INVALID_LOCAL_API_KEY'));
     return;
   }
 
-  if (req.path === '/api/v1/health') {
-    logger.info(
-      {
-        method: req.method,
-        path: req.path,
-        hasLocalApiKey: true,
-      },
-      'local API key accepted',
-    );
-  }
-
+  logHealthStage(req, 'local API key accepted');
   next();
 };
 

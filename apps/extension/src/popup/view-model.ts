@@ -25,7 +25,7 @@ export function getApiKeyStatus(secret: string, health?: HealthDto, loadError = 
   const lower = loadError.toLowerCase();
   if (lower.includes('unauthorized') || lower.includes('forbidden') || lower.includes('api key'))
     return 'invalid';
-  return health?.freelancerTokenConfigured === false ? 'missing' : 'valid';
+  return health || secret.trim() ? 'valid' : 'missing';
 }
 
 export function buildPopupViewModel(params: {
@@ -35,16 +35,18 @@ export function buildPopupViewModel(params: {
   isPolling: boolean;
   actionPending: boolean;
 }): PopupViewModel {
-  const backendConnected = Boolean(params.health) && !params.error;
+  const backendConnected = Boolean(params.health);
   const databaseConnected = params.health?.database === 'connected';
   const monitorRunning = databaseConnected ? (params.health?.monitoring.running ?? false) : false;
-  const monitorStatus: MonitorStatus = params.error
-    ? 'error'
-    : !params.health && params.secret.trim()
-      ? 'connecting'
-      : monitorRunning
-        ? 'running'
-        : 'stopped';
+  const monitorStatus: MonitorStatus = !params.health
+    ? params.error
+      ? 'error'
+      : params.secret.trim()
+        ? 'connecting'
+        : 'stopped'
+    : monitorRunning
+      ? 'running'
+      : 'stopped';
   const pollIntervalSeconds = params.health?.monitoring.currentPollingIntervalSeconds ?? 0;
   const lastPollAt = params.health?.monitoring.lastSuccessfulPoll;
 

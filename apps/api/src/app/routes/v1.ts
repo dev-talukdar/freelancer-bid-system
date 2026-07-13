@@ -29,33 +29,60 @@ export const v1Router = Router();
 const ok = (res: Response, message: string, data: unknown) =>
   res.json({ success: true, message, data });
 
-export const healthController = async (_req: Request, res: Response): Promise<void> => {
-  logger.info({ readyState: mongoose.connection.readyState }, 'health request received');
-  const database = dbStatus();
-  logger.info({ readyState: mongoose.connection.readyState, database }, 'database state read');
-  const unreadCount =
-    database === 'connected'
-      ? await DetectedProjectModel.countDocuments({ readAt: { $exists: false } })
-      : 0;
+const isHealthRequest = (req: Request): boolean => req.originalUrl === '/api/v1/health';
 
-  ok(res, 'Health check', {
-    status: database === 'connected' ? 'ok' : 'degraded',
-    database,
-    monitoring: {
-      ...monitor.state,
-      polling: monitor.lock.isLocked(),
-      unreadCount,
+const logHealthStage = (req: Request, stage: string, extra: Record<string, unknown> = {}): void => {
+  if (!isHealthRequest(req)) return;
+
+  logger.info(
+    {
+      method: req.method,
+      originalUrl: req.originalUrl,
+      path: req.path,
+      hasLocalApiKey: Boolean(req.header('X-Local-API-Key')),
+      mongooseReadyState: mongoose.connection.readyState,
+      ...extra,
     },
-    freelancerTokenConfigured: Boolean(env.FREELANCER_ACCESS_TOKEN),
-    freelancerTokenExpiresAt: env.FREELANCER_TOKEN_EXPIRES_AT,
-    freelancerTokenExpirationWarning: isTokenExpiringSoon(),
-  });
-  logger.info({ database }, 'health response sent');
+    stage,
+  );
 };
 
-v1Router.get('/health', (req, res, next) => {
-  void healthController(req, res).catch(next);
+export const healthController = (req: Request, res: Response): void => {
+  logHealthStage(req, 'health controller entered');
+
+  const database = dbStatus();
+  logHealthStage(req, 'database state read', { database });
+
+  res.setHeader('Cache-Control', 'no-store');
+
+  res.status(200).json({
+    success: true,
+    message: 'Health check',
+    data: {
+      status: database === 'connected' ? 'ok' : 'degraded',
+      database,
+      monitoring: {
+        running: monitor.state.running,
+        currentPollingIntervalSeconds: monitor.state.currentPollingIntervalSeconds,
+        lastSuccessfulPoll: monitor.state.lastSuccessfulPoll,
+        lastPollingError: monitor.state.lastPollingError,
+        polling: monitor.lock.isLocked(),
+      },
+      freelancerTokenConfigured: Boolean(env.FREELANCER_ACCESS_TOKEN),
+      freelancerTokenExpiresAt: env.FREELANCER_TOKEN_EXPIRES_AT,
+      freelancerTokenExpirationWarning: isTokenExpiringSoon(),
+    },
+  });
+
+  logHealthStage(req, 'health response sent', { database });
+};
+
+v1Router.use((req, _res, next) => {
+  logHealthStage(req, 'v1 router entered');
+  next();
 });
+
+v1Router.get('/health', healthController);
 v1Router.get('/freelancer/me', async (_req, res, next) => {
   try {
     const me = await new FreelancerClient().self();
@@ -97,13 +124,29 @@ v1Router.post('/monitor/stop', (_req, res) => {
   monitor.stop();
   ok(res, 'Monitor stopped', monitor.state);
 });
-v1Router.get('/monitor/status', async (_req, res) =>
+v1Router.get('/monitor/status', async (_req, res) => {
+  const database = dbStatus();
+  let unreadCount = 0;
+  let unreadCountError: string | undefined;
+
+  if (database === 'connected') {
+    try {
+      unreadCount = await DetectedProjectModel.countDocuments({
+        readAt: { $exists: false },
+      }).maxTimeMS(3_000);
+    } catch (error) {
+      unreadCountError = error instanceof Error ? error.message : 'Unread count unavailable';
+      logger.warn({ err: error }, 'bounded unread count query failed');
+    }
+  }
+
   ok(res, 'Monitor status', {
     ...monitor.state,
     polling: monitor.lock.isLocked(),
-    unreadCount: await DetectedProjectModel.countDocuments({ readAt: { $exists: false } }),
-  }),
-);
+    unreadCount,
+    ...(unreadCountError ? { unreadCountError } : {}),
+  });
+});
 v1Router.post('/monitor/poll', async (_req, res, next) => {
   try {
     ok(res, 'Poll completed', await monitor.poll());
