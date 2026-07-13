@@ -246,7 +246,9 @@ export function projectSkipReason(
 
   const matchesCountry =
     profileCountries.length > 0 &&
-    clientCountries.some((clientCountry) => profileCountries.includes(clientCountry));
+    (clientCountries.length === 0 ||
+      clientCountries.some((clientCountry) => profileCountries.includes(clientCountry)));
+
   if (!matchesCountry) return 'countryMismatch';
 
   const profileCurrencies = profile.currencies.flatMap(currencyTokens);

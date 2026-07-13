@@ -347,6 +347,16 @@ describe('freelancer project normalization and matching', () => {
     expect(projectSkipReason({ ...activeProfile, languages: [] }, minimal)).toBe('jobMismatch');
   });
 
+  it('allows projects with missing country data when country filters are configured', () => {
+    expect(
+      projectMatches(activeProfile, {
+        ...realisticProject,
+        clientCountryCode: undefined,
+        clientCountry: undefined,
+      }),
+    ).toBe(true);
+  });
+
   it('matches configured country names and aliases against country codes', () => {
     const profile = {
       ...activeProfile,
