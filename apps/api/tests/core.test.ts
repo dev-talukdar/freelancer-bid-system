@@ -130,11 +130,24 @@ describe('api foundations', () => {
     expect(monitorQs.getAll('jobs[]')).toEqual(['9', '500']);
     expect(monitorQs.getAll('countries[]')).toEqual(['us', 'gb']);
     expect(monitorQs.getAll('languages[]')).toEqual(['en']);
-    expect(monitorQs.get('min_price')).toBe('100');
+    expect(monitorQs.get('min_price')).toBeNull();
     expect(monitorQs.get('max_price')).toBe('1000');
     expect(monitorQs.get('min_hourly_rate')).toBe('25');
     expect(monitorQs.get('max_hourly_rate')).toBe('150');
     vi.useRealTimers();
+  });
+
+  it('keeps fixed-budget searches broad enough for projects whose maximum budget matches the minimum', () => {
+    const params = buildMonitorSearchParams({
+      ...objectIdProfile,
+      projectTypes: ['fixed'],
+      minimumFixedBudget: 250,
+      maximumFixedBudget: undefined,
+    });
+
+    const monitorQs = buildFreelancerQuery(params);
+    expect(monitorQs.get('min_price')).toBeNull();
+    expect(monitorQs.get('max_price')).toBe('50000');
   });
 
   it('parses rate limit headers and adapts delay', () => {
@@ -622,15 +635,15 @@ describe('mongoose payload builders', () => {
         clientCountryCode: 'us',
       }),
     ).toBe(true);
+    expect(
+      projectMatches(payload, {
+        ...realisticProject,
+        language: undefined,
+        clientCountryCode: 'in',
+        clientCountry: 'India',
+      }),
+    ).toBe(false);
   });
-  expect(
-    projectMatches(payload, {
-      ...realisticProject,
-      language: undefined,
-      clientCountryCode: 'in',
-      clientCountry: 'India',
-    }),
-  ).toBe(false);
 
   it('omits undefined optional search profile values while preserving null and numbers', () => {
     const omitted = buildSearchProfileCreatePayload({ name: 'Omitted' });
