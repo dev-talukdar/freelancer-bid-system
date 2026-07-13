@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import type { NextFunction, Request, Response } from 'express';
 import { logger } from '../config/logger.js';
 
@@ -14,18 +15,31 @@ export const httpLogger = (req: Request, res: Response, next: NextFunction): voi
     const elapsedNanoseconds = process.hrtime.bigint() - startedAt;
     const durationMs = Number(elapsedNanoseconds) / 1_000_000;
 
-    logger.info(
-      {
-        requestId: getRequestId(res),
-        method: req.method,
-        path: req.originalUrl,
-        statusCode: res.statusCode,
-        durationMs: Number(durationMs.toFixed(2)),
-        contentLength: res.getHeader('content-length'),
-        userAgent: req.get('user-agent'),
-      },
-      'HTTP request completed',
-    );
+    const logFields = {
+      requestId: getRequestId(res),
+      method: req.method,
+      path: req.originalUrl,
+      statusCode: res.statusCode,
+      durationMs: Number(durationMs.toFixed(2)),
+      contentLength: res.getHeader('content-length'),
+      userAgent: req.get('user-agent'),
+    };
+
+    logger.info(logFields, 'HTTP request completed');
+
+    if (req.originalUrl === '/api/v1/health') {
+      logger.info(
+        {
+          method: req.method,
+          originalUrl: req.originalUrl,
+          path: req.path,
+          hasLocalApiKey: Boolean(req.header('X-Local-API-Key')),
+          mongooseReadyState: mongoose.connection.readyState,
+          statusCode: res.statusCode,
+        },
+        'response finish event',
+      );
+    }
   });
 
   res.once('close', () => {
