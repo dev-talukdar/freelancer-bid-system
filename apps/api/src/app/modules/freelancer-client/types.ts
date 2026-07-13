@@ -36,7 +36,7 @@ export interface FreelancerProject {
   upgrades?: Record<string, unknown>;
   location?: { country?: { name?: string; code?: string } };
   owner_id?: number;
-  owner?: { id?: number; username?: string };
+  owner?: { id?: number; username?: string } & Partial<FreelancerUser>;
 }
 
 export interface NormalizedProjectJob {

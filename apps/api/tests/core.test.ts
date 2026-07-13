@@ -127,6 +127,7 @@ describe('api foundations', () => {
     expect(monitorQs.get('sort_field')).toBe('time_submitted');
     expect(monitorQs.get('reverse_sort')).toBe('false');
     expect(monitorQs.get('limit')).toBe('100');
+    expect(monitorQs.get('compact')).toBe('false');
     expect(monitorQs.get('from_time')).toBe(String(Math.floor(Date.now() / 1000) - 30 * 60));
     expect(monitorQs.getAll('jobs[]')).toEqual([]);
     expect(monitorQs.getAll('countries[]')).toEqual([]);
@@ -238,6 +239,21 @@ describe('freelancer project normalization and matching', () => {
     expect(normalizedRealisticProject.bidStats).toEqual({ bidCount: 3, bidAvg: 420 });
     expect(normalizedRealisticProject.seoUrl).toBe('reactjs/React-dashboard-development');
     expect(normalizeFreelancerProject({ id: 2, title: 'Bad', type: 'contest' })).toBeUndefined();
+  });
+
+  it('uses inline owner country details when the users map is unavailable', () => {
+    const normalized = normalizeFreelancerProject({
+      id: 123,
+      title: 'React dashboard',
+      type: 'fixed',
+      status: 'active',
+      time_submitted: Math.floor(Date.now() / 1000),
+      jobs: [{ id: 759, name: 'React.js' }],
+      owner: { id: 456, username: 'buyer', country: { code: 'ca', name: 'Canada' } },
+    });
+
+    expect(normalized?.clientCountryCode).toBe('ca');
+    expect(normalized?.clientCountry).toBe('Canada');
   });
 
   it('allows empty jobIds and countries, including missing country', () => {

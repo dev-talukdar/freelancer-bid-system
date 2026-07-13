@@ -143,7 +143,10 @@ export function buildMonitorSearchParams(profile: SearchProfileDocument): Projec
     sort_field: 'time_submitted',
     reverse_sort: false,
     limit: 100,
-    compact: true,
+    // Keep full responses: compact responses can omit country/location details even when
+    // the detail flags below are enabled, which makes every otherwise relevant project
+    // fail the local country filter and prevents notification delivery.
+    compact: false,
     full_description: true,
     job_details: true,
     user_details: true,

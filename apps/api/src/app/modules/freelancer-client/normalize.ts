@@ -21,7 +21,7 @@ export const normalizeOptionalText = (value: string | undefined): string | undef
 };
 
 const userCountry = (
-  user: FreelancerUser | undefined,
+  user: Pick<FreelancerUser, 'country' | 'location'> | undefined,
 ): { name?: string; code?: string } | undefined => user?.country ?? user?.location?.country;
 
 export function normalizeFreelancerProject(
@@ -88,7 +88,7 @@ export function normalizeFreelancerProject(
     normalized.bidStats = bidStats;
   }
 
-  const fallbackCountry = userCountry(owner);
+  const fallbackCountry = userCountry(owner) ?? userCountry(project.owner);
   const projectCountry = project.location?.country;
 
   const clientCountryName = projectCountry?.name ?? fallbackCountry?.name;
