@@ -56,6 +56,20 @@ export const TARGET_COUNTRY_CODES = [
   'ie',
   'sg',
   'pt',
+  'kw',
+  'qa',
+  'ae',
+  'no',
+  'lu',
+  'th',
+  'dk',
+  'at',
+  'bh',
+  'lt',
+  'jp',
+  'hr',
+  'ee',
+  'ro',
   'se',
   'ch',
   'pl',
@@ -68,22 +82,15 @@ export const TARGET_COUNTRY_CODES = [
   'us',
 ] as const;
 
+export const TARGET_CURRENCY_CODES = ['USD', 'GBP', 'EUR', 'AUD', 'NZD', 'CAD'] as const;
+
 const targetSkillIds = (): number[] => [...TARGET_SKILL_IDS];
-const sameStringSet = (left: string[], right: readonly string[]): boolean => {
-  const normalizedLeft = new Set(left.map((value) => value.trim().toLowerCase()));
-  const normalizedRight = new Set(right.map((value) => value.trim().toLowerCase()));
-  if (normalizedLeft.size !== normalizedRight.size) return false;
-  return [...normalizedLeft].every((value) => normalizedRight.has(value));
-};
 
 export const syncActiveProfileTargetSkillIds = async (): Promise<boolean> => false;
 export const clearLegacyDefaultCountryFilters = async (): Promise<boolean> => {
-  const profile = await SearchProfileModel.findOne({ enabled: true }).sort({ updatedAt: -1 });
-  if (!profile || !sameStringSet(profile.countries, TARGET_COUNTRY_CODES)) return false;
-
-  profile.countries = [];
-  await profile.save();
-  return true;
+  // Country is now a required notification gate, so startup must not silently remove
+  // configured preferred countries. Keep this legacy hook as a no-op for safe upgrades.
+  return false;
 };
 
 export const buildSearchProfileCreatePayload = (input: unknown): SearchProfileCreatePayload => {
@@ -214,8 +221,8 @@ export const seedSearchProfile = async (): Promise<void> => {
       keywords: [],
       excludedKeywords: [],
       jobIds: targetSkillIds(),
-      countries: [],
-      currencies: [],
+      countries: [...TARGET_COUNTRY_CODES],
+      currencies: [...TARGET_CURRENCY_CODES],
       languages: [],
       projectTypes: ['fixed', 'hourly'],
       minimumFixedBudget: null,

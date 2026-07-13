@@ -83,6 +83,20 @@ const COUNTRY_ALIAS_GROUPS = [
   ['ie', 'ireland'],
   ['sg', 'singapore'],
   ['pt', 'portugal'],
+  ['kw', 'kuwait'],
+  ['qa', 'qatar'],
+  ['ae', 'united arab emirates', 'uae', 'u a e'],
+  ['no', 'norway'],
+  ['lu', 'luxembourg'],
+  ['th', 'thailand'],
+  ['dk', 'denmark'],
+  ['at', 'austria'],
+  ['bh', 'bahrain'],
+  ['lt', 'lithuania'],
+  ['jp', 'japan'],
+  ['hr', 'croatia'],
+  ['ee', 'estonia'],
+  ['ro', 'romania'],
   ['se', 'sweden'],
   ['ch', 'switzerland'],
   ['pl', 'poland'],
@@ -95,14 +109,32 @@ const COUNTRY_ALIAS_GROUPS = [
   ['us', 'united states', 'united states of america', 'usa', 'u s a', 'america'],
 ] as const;
 
-const countryTokens = (value: string | undefined): string[] => {
+const CURRENCY_ALIAS_GROUPS = [
+  ['usd', 'us dollar', 'us dollars'],
+  ['gbp', 'pound', 'pounds', 'british pound', 'british pounds'],
+  ['eur', 'euro', 'euros', '€'],
+  ['aud', 'australian dollar', 'australian dollars'],
+  ['nzd', 'new zealand dollar', 'new zealand dollars'],
+  ['cad', 'canadian dollar', 'canadian dollars'],
+] as const;
+
+const BLOCKED_CURRENCY_CODES = new Set(['inr']);
+
+const expandAliases = (
+  value: string | undefined,
+  aliasGroups: readonly (readonly string[])[],
+): string[] => {
   if (value === undefined) return [];
   const token = normalized(value);
-  const aliasGroup = COUNTRY_ALIAS_GROUPS.find((group) =>
-    (group as readonly string[]).includes(token),
-  );
+  const aliasGroup = aliasGroups.find((group) => group.includes(token));
   return aliasGroup === undefined ? [token] : [...aliasGroup];
 };
+
+const countryTokens = (value: string | undefined): string[] =>
+  expandAliases(value, COUNTRY_ALIAS_GROUPS);
+
+const currencyTokens = (value: string | undefined): string[] =>
+  expandAliases(value, CURRENCY_ALIAS_GROUPS);
 
 const isDefinedNumber = (value: number | null | undefined): value is number =>
   typeof value === 'number' && Number.isFinite(value);
@@ -186,23 +218,13 @@ export function projectSkipReason(
   if (excludedKeywordMatch) return 'excludedKeyword';
 
   const hasJobFilters = profile.jobIds.length > 0;
-  const jobMatch =
-    !hasJobFilters || projectSkillIds.some((jobId) => profile.jobIds.includes(jobId));
+  const jobMatch = hasJobFilters && projectSkillIds.some((jobId) => profile.jobIds.includes(jobId));
 
-  const hasKeywordFilters = profile.keywords.length > 0;
-  const keywordMatch =
-    !hasKeywordFilters ||
-    profile.keywords.some((keyword) => {
-      const normalizedKeyword = normalize(keyword);
+  // Notifications must be based on an explicit skill-ID match. Keyword matching is kept
+  // out of the notification gate so a text match cannot bypass preferred skills.
+  const keywordMatch = false;
 
-      return (
-        includesNormalized(projectText, normalizedKeyword) ||
-        projectSkillNames.some((skillName) => includesNormalized(skillName, normalizedKeyword))
-      );
-    });
-
-  const relevanceMatch = (!hasJobFilters && !hasKeywordFilters) || jobMatch || keywordMatch;
-  if (!relevanceMatch) {
+  if (!jobMatch) {
     logger.debug(
       {
         projectId: project.id,
@@ -223,15 +245,19 @@ export function projectSkipReason(
   const clientCountries = [project.clientCountryCode, project.clientCountry].flatMap(countryTokens);
 
   const matchesCountry =
-    profileCountries.length === 0 ||
+    profileCountries.length > 0 &&
     clientCountries.some((clientCountry) => profileCountries.includes(clientCountry));
   if (!matchesCountry) return 'countryMismatch';
 
-  const profileCurrencies = profile.currencies.map(normalized);
-  const projectCurrency = project.currency?.code;
+  const profileCurrencies = profile.currencies.flatMap(currencyTokens);
+  const projectCurrencies = currencyTokens(project.currency?.code);
+
   const matchesCurrency =
-    profileCurrencies.length === 0 ||
-    (projectCurrency !== undefined && profileCurrencies.includes(normalized(projectCurrency)));
+    profileCurrencies.length > 0 &&
+    projectCurrencies.length > 0 &&
+    !projectCurrencies.some((currency) => BLOCKED_CURRENCY_CODES.has(currency)) &&
+    projectCurrencies.some((projectCurrency) => profileCurrencies.includes(projectCurrency));
+
   if (!matchesCurrency) return 'currencyMismatch';
 
   const profileLanguages = profile.languages.map(normalized);

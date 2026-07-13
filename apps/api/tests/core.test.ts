@@ -32,6 +32,7 @@ import { FreelancerClient } from '../src/app/modules/freelancer-client/client.js
 import type { NormalizedProject } from '../src/app/modules/freelancer-client/types.js';
 import {
   TARGET_COUNTRY_CODES,
+  TARGET_CURRENCY_CODES,
   TARGET_SKILL_IDS,
   buildSearchProfileCreatePayload,
   clearLegacyDefaultCountryFilters,
@@ -50,9 +51,9 @@ import {
 const activeProfile: ProjectFilterProfile = {
   keywords: ['react'],
   excludedKeywords: [],
-  jobIds: [],
-  countries: [],
-  currencies: [],
+  jobIds: [69],
+  countries: ['us'],
+  currencies: ['USD'],
   languages: ['en'],
   projectTypes: ['fixed', 'hourly'],
   allowLocalProjects: true,
@@ -89,6 +90,7 @@ const normalizedRealisticProject = normalizeFreelancerProject(
 )!;
 const realisticProject = {
   ...normalizedRealisticProject,
+  clientCountryCode: 'us',
   timeSubmitted: Math.floor(Date.now() / 1000),
 };
 
@@ -223,24 +225,25 @@ describe('freelancer project normalization and matching', () => {
     expect(normalizeFreelancerProject({ id: 2, title: 'Bad', type: 'contest' })).toBeUndefined();
   });
 
-  it('allows empty jobIds and countries, including missing country', () => {
-    const project: NormalizedProject = { ...realisticProject, jobs: [] };
-    delete project.clientCountry;
-    delete project.clientCountryCode;
-    expect(projectMatches(activeProfile, project)).toBe(true);
-  });
-
-  it('matches one keyword case-insensitively', () => {
-    expect(projectMatches({ ...activeProfile, keywords: ['DASHBOARD'] }, realisticProject)).toBe(
-      true,
+  it('rejects missing required skill, country, and currency filters', () => {
+    expect(projectSkipReason({ ...activeProfile, jobIds: [] }, realisticProject)).toBe(
+      'jobMismatch',
+    );
+    expect(projectSkipReason({ ...activeProfile, countries: [] }, realisticProject)).toBe(
+      'countryMismatch',
+    );
+    expect(projectSkipReason({ ...activeProfile, currencies: [] }, realisticProject)).toBe(
+      'currencyMismatch',
     );
   });
 
-  it('matches keywords from normalized job names', () => {
-    const project: NormalizedProject = { ...realisticProject, title: 'Frontend work' };
-    delete project.previewDescription;
-    delete project.description;
-    expect(projectMatches({ ...activeProfile, keywords: ['react.js'] }, project)).toBe(true);
+  it('does not use keywords as a substitute for required skill IDs', () => {
+    expect(
+      projectSkipReason(
+        { ...activeProfile, keywords: ['DASHBOARD'], jobIds: [500] },
+        realisticProject,
+      ),
+    ).toBe('jobMismatch');
   });
 
   it('accepts active/open variants and open frontend status', () => {
@@ -311,11 +314,33 @@ describe('freelancer project normalization and matching', () => {
       timeSubmitted: Math.floor(Date.now() / 1000),
       jobs: [],
     };
-    expect(projectMatches({ ...activeProfile, languages: [] }, minimal)).toBe(true);
+    expect(projectSkipReason({ ...activeProfile, languages: [] }, minimal)).toBe('jobMismatch');
   });
 
   it('matches configured country names and aliases against country codes', () => {
-    const profile = { ...activeProfile, countries: ['USA', 'Taiwan', 'Poland'] };
+    const profile = {
+      ...activeProfile,
+      countries: [
+        'USA',
+        'Taiwan',
+        'Poland',
+        'Kuwait',
+        'Qatar',
+        'United Arab Emirates',
+        'Norway',
+        'Luxembourg',
+        'Thailand',
+        'Denmark',
+        'Austria',
+        'Bahrain',
+        'Lithuania',
+        'Japan',
+        'Croatia',
+        'Estonia',
+        'Romania',
+      ],
+    };
+
     expect(projectMatches(profile, { ...realisticProject, clientCountryCode: 'us' })).toBe(true);
     expect(projectMatches(profile, { ...realisticProject, clientCountryCode: 'tw' })).toBe(true);
     expect(projectMatches(profile, { ...realisticProject, clientCountry: 'Poland' })).toBe(true);
@@ -326,13 +351,50 @@ describe('freelancer project normalization and matching', () => {
         clientCountry: 'United States',
       }),
     ).toBe(true);
+    expect(projectMatches(profile, { ...realisticProject, clientCountryCode: 'kw' })).toBe(true);
+    expect(projectMatches(profile, { ...realisticProject, clientCountryCode: 'qa' })).toBe(true);
+    expect(projectMatches(profile, { ...realisticProject, clientCountryCode: 'ae' })).toBe(true);
+    expect(projectMatches(profile, { ...realisticProject, clientCountry: 'Norway' })).toBe(true);
+    expect(projectMatches(profile, { ...realisticProject, clientCountry: 'Luxembourg' })).toBe(
+      true,
+    );
+    expect(projectMatches(profile, { ...realisticProject, clientCountryCode: 'th' })).toBe(true);
+    expect(projectMatches(profile, { ...realisticProject, clientCountryCode: 'dk' })).toBe(true);
+    expect(projectMatches(profile, { ...realisticProject, clientCountryCode: 'at' })).toBe(true);
+    expect(projectMatches(profile, { ...realisticProject, clientCountryCode: 'bh' })).toBe(true);
+    expect(projectMatches(profile, { ...realisticProject, clientCountryCode: 'lt' })).toBe(true);
+    expect(projectMatches(profile, { ...realisticProject, clientCountryCode: 'jp' })).toBe(true);
+    expect(projectMatches(profile, { ...realisticProject, clientCountryCode: 'hr' })).toBe(true);
+    expect(projectMatches(profile, { ...realisticProject, clientCountryCode: 'ee' })).toBe(true);
+    expect(projectMatches(profile, { ...realisticProject, clientCountryCode: 'ro' })).toBe(true);
   });
 
-  it('filters projects by allowed currencies', () => {
+  it('filters projects by allowed currencies and blocks INR', () => {
     expect(projectMatches({ ...activeProfile, currencies: ['USD'] }, realisticProject)).toBe(true);
+
+    expect(projectMatches({ ...activeProfile, currencies: ['usd'] }, realisticProject)).toBe(true);
+    expect(
+      projectMatches(
+        { ...activeProfile, currencies: ['euro'] },
+        { ...realisticProject, currency: { code: 'EUR' } },
+      ),
+    ).toBe(true);
+    expect(
+      projectMatches(
+        { ...activeProfile, currencies: ['GBP', 'EUR', 'AUD', 'NZD', 'CAD'] },
+        { ...realisticProject, currency: { code: 'CAD' } },
+      ),
+    ).toBe(true);
+
     expect(projectSkipReason({ ...activeProfile, currencies: ['EUR'] }, realisticProject)).toBe(
       'currencyMismatch',
     );
+    expect(
+      projectSkipReason(
+        { ...activeProfile, currencies: ['INR', 'USD'] },
+        { ...realisticProject, currency: { code: 'INR' } },
+      ),
+    ).toBe('currencyMismatch');
   });
 
   it('handles nullable numeric filters and reports accurate reasons', () => {
@@ -435,18 +497,18 @@ describe('freelancer project normalization and matching', () => {
     ).toBe(true);
   });
 
-  it('accepts project when skill ID misses but keyword matches title', () => {
+  it('rejects project when skill ID misses even if keyword matches title', () => {
     expect(
-      projectMatches(
+      projectSkipReason(
         { ...activeProfile, keywords: ['dashboard'], jobIds: [500] },
         { ...realisticProject, title: 'Dashboard build', jobs: [{ id: 1, name: 'Other' }] },
       ),
     ).toBe(true);
   });
 
-  it('accepts project when skill ID misses but keyword matches description', () => {
+  it('rejects project when skill ID misses even if keyword matches description', () => {
     expect(
-      projectMatches(
+      projectSkipReason(
         { ...activeProfile, keywords: ['client portal'], jobIds: [500] },
         {
           ...realisticProject,
@@ -456,10 +518,10 @@ describe('freelancer project normalization and matching', () => {
           jobs: [{ id: 1, name: 'Other' }],
         },
       ),
-    ).toBe(true);
+    ).toBe('jobMismatch');
   });
 
-  it('rejects project when neither skill ID nor keyword matches', () => {
+  it('rejects project when skill ID does not match', () => {
     expect(
       projectSkipReason(
         { ...activeProfile, keywords: ['dashboard'], jobIds: [500] },
@@ -483,9 +545,9 @@ describe('freelancer project normalization and matching', () => {
     ).toBe('excludedKeyword');
   });
 
-  it('empty jobIds and empty keywords do not block relevance', () => {
+  it('empty jobIds block notifications because a skill match is required', () => {
     expect(
-      projectMatches(
+      projectSkipReason(
         { ...activeProfile, keywords: [], jobIds: [] },
         {
           ...realisticProject,
@@ -493,7 +555,7 @@ describe('freelancer project normalization and matching', () => {
           previewDescription: 'No configured relevance filters',
         },
       ),
-    ).toBe(true);
+    ).toBe('jobMismatch');
   });
 
   it('accepts multiple project skills with one matching ID', () => {
@@ -513,9 +575,9 @@ describe('freelancer project normalization and matching', () => {
     ).toBe(true);
   });
 
-  it('normalizes skill names for keyword fallback', () => {
+  it('does not use normalized skill names as a keyword fallback', () => {
     expect(
-      projectMatches(
+      projectSkipReason(
         { ...activeProfile, keywords: ['Next JS'], jobIds: [500] },
         {
           ...realisticProject,
@@ -524,14 +586,14 @@ describe('freelancer project normalization and matching', () => {
           jobs: [{ id: 1, name: 'Next.js' }],
         },
       ),
-    ).toBe(true);
+    ).toBe('jobMismatch');
   });
 
   it('continues applying filters after relevance matching', () => {
     expect(
       projectSkipReason(
         { ...activeProfile, keywords: [], jobIds: [500], currencies: ['EUR'] },
-        { ...realisticProject, jobs: [{ id: 500, name: 'Node.js' }] },
+        { ...realisticProject, clientCountryCode: 'us', jobs: [{ id: 500, name: 'Node.js' }] },
       ),
     ).toBe('currencyMismatch');
   });
@@ -575,33 +637,25 @@ describe('mongoose payload builders', () => {
     create.mockRestore();
   });
 
-  it('clears legacy broad default country filters that block most notifications', async () => {
-    const save = vi.fn();
-    const legacyProfile = { countries: [...TARGET_COUNTRY_CODES], save };
-    const sort = vi.fn().mockResolvedValue({ countries: ['US', 'ca', 'gb', 'au'], save });
-    const findOne = vi.spyOn(SearchProfileModel, 'findOne').mockReturnValue({ sort } as never);
+  it('keeps configured preferred countries during legacy startup hook', async () => {
+    const findOne = vi.spyOn(SearchProfileModel, 'findOne');
 
     await expect(clearLegacyDefaultCountryFilters()).resolves.toBe(false);
-    expect(save).not.toHaveBeenCalled();
-
-    sort.mockResolvedValue(legacyProfile);
-
-    await expect(clearLegacyDefaultCountryFilters()).resolves.toBe(true);
-    expect(legacyProfile.countries).toEqual([]);
-    expect(save).toHaveBeenCalledTimes(1);
+    expect(findOne).not.toHaveBeenCalled();
 
     findOne.mockRestore();
   });
 
-  it('seeds broad default profile filters for realistic notifications', () => {
+  it('seeds required country/currency/skill profile filters for realistic notifications', () => {
     const payload = buildSearchProfileCreatePayload({
       name: 'Web development monitoring',
       enabled: true,
       keywords: [],
       excludedKeywords: [],
       jobIds: [...TARGET_SKILL_IDS],
-      countries: [],
-      currencies: [],
+      countries: [...TARGET_COUNTRY_CODES],
+      currencies: [...TARGET_CURRENCY_CODES],
+
       languages: [],
       projectTypes: ['fixed', 'hourly'],
       minimumFixedBudget: null,
@@ -618,9 +672,10 @@ describe('mongoose payload builders', () => {
       projectMatches(payload, {
         ...realisticProject,
         language: undefined,
-        clientCountryCode: undefined,
+        clientCountryCode: 'in',
+        clientCountry: 'India',
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('omits undefined optional search profile values while preserving null and numbers', () => {
