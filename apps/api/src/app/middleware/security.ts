@@ -31,10 +31,15 @@ export const buildAllowedOrigins = (extensionIdOrOrigin?: string) => {
 };
 
 const allowedOrigins = buildAllowedOrigins(env.EXTENSION_ID);
+const isChromeExtensionOrigin = (origin: string) => /^chrome-extension:\/\/[a-p]{32}$/.test(origin);
 
 export const corsMiddleware = cors({
   origin(origin, callback) {
-    if (!origin || allowedOrigins.has(origin)) {
+    if (
+      !origin ||
+      allowedOrigins.has(origin) ||
+      (!env.EXTENSION_ID?.trim() && isChromeExtensionOrigin(origin))
+    ) {
       callback(null, true);
       return;
     }

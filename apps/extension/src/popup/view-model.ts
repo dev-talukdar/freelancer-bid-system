@@ -6,6 +6,7 @@ export type ApiKeyStatus = 'valid' | 'missing' | 'invalid';
 
 export interface PopupViewModel {
   backendConnected: boolean;
+  databaseConnected: boolean;
   monitorStatus: MonitorStatus;
   monitorRunning: boolean;
   apiKeyStatus: ApiKeyStatus;
@@ -34,8 +35,9 @@ export function buildPopupViewModel(params: {
   isPolling: boolean;
   actionPending: boolean;
 }): PopupViewModel {
-  const backendConnected = params.health?.database === 'connected';
-  const monitorRunning = backendConnected ? (params.health?.monitoring.running ?? false) : false;
+  const backendConnected = Boolean(params.health) && !params.error;
+  const databaseConnected = params.health?.database === 'connected';
+  const monitorRunning = databaseConnected ? (params.health?.monitoring.running ?? false) : false;
   const monitorStatus: MonitorStatus = params.error
     ? 'error'
     : !params.health && params.secret.trim()
@@ -48,6 +50,7 @@ export function buildPopupViewModel(params: {
 
   return {
     backendConnected,
+    databaseConnected,
     monitorStatus,
     monitorRunning,
     apiKeyStatus: getApiKeyStatus(params.secret, params.health, params.error),
@@ -56,9 +59,12 @@ export function buildPopupViewModel(params: {
     pollIntervalSeconds,
     unreadCount: params.health?.monitoring.unreadCount ?? 0,
     isPolling: params.isPolling || (params.health?.monitoring.polling ?? false),
-    startUnavailable: monitorRunning || params.actionPending || !backendConnected,
-    stopUnavailable: !monitorRunning || params.actionPending || !backendConnected,
-    pollUnavailable: params.isPolling || params.actionPending || !backendConnected,
+    startUnavailable:
+      monitorRunning || params.actionPending || !backendConnected || !databaseConnected,
+    stopUnavailable:
+      !monitorRunning || params.actionPending || !backendConnected || !databaseConnected,
+    pollUnavailable:
+      params.isPolling || params.actionPending || !backendConnected || !databaseConnected,
   };
 }
 

@@ -251,6 +251,12 @@ function App() {
             tone={view.backendConnected ? 'green' : 'red'}
           />
         </StatusRow>
+        <StatusRow label="Database">
+          <StatusBadge
+            label={view.databaseConnected ? 'Connected' : 'Disconnected'}
+            tone={view.databaseConnected ? 'green' : 'red'}
+          />
+        </StatusRow>
         <StatusRow label="Monitoring">
           <StatusBadge
             label={view.monitorRunning ? 'Running' : 'Stopped'}
