@@ -31,8 +31,10 @@ import { realisticFreelancerActiveProjectResponse } from './fixtures/freelancer-
 import { FreelancerClient } from '../src/app/modules/freelancer-client/client.js';
 import type { NormalizedProject } from '../src/app/modules/freelancer-client/types.js';
 import {
+  TARGET_COUNTRY_CODES,
   TARGET_SKILL_IDS,
   buildSearchProfileCreatePayload,
+  clearLegacyDefaultCountryFilters,
   seedSearchProfile,
   syncActiveProfileTargetSkillIds,
 } from '../src/app/modules/search-profile/service.js';
@@ -571,6 +573,24 @@ describe('mongoose payload builders', () => {
     expect(create).not.toHaveBeenCalled();
     exists.mockRestore();
     create.mockRestore();
+  });
+
+  it('clears legacy broad default country filters that block most notifications', async () => {
+    const save = vi.fn();
+    const legacyProfile = { countries: [...TARGET_COUNTRY_CODES], save };
+    const sort = vi.fn().mockResolvedValue({ countries: ['US', 'ca', 'gb', 'au'], save });
+    const findOne = vi.spyOn(SearchProfileModel, 'findOne').mockReturnValue({ sort } as never);
+
+    await expect(clearLegacyDefaultCountryFilters()).resolves.toBe(false);
+    expect(save).not.toHaveBeenCalled();
+
+    sort.mockResolvedValue(legacyProfile);
+
+    await expect(clearLegacyDefaultCountryFilters()).resolves.toBe(true);
+    expect(legacyProfile.countries).toEqual([]);
+    expect(save).toHaveBeenCalledTimes(1);
+
+    findOne.mockRestore();
   });
 
   it('seeds broad default profile filters for realistic notifications', () => {

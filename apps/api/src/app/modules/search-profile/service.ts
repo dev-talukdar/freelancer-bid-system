@@ -69,7 +69,22 @@ export const TARGET_COUNTRY_CODES = [
 ] as const;
 
 const targetSkillIds = (): number[] => [...TARGET_SKILL_IDS];
+const sameStringSet = (left: string[], right: readonly string[]): boolean => {
+  const normalizedLeft = new Set(left.map((value) => value.trim().toLowerCase()));
+  const normalizedRight = new Set(right.map((value) => value.trim().toLowerCase()));
+  if (normalizedLeft.size !== normalizedRight.size) return false;
+  return [...normalizedLeft].every((value) => normalizedRight.has(value));
+};
+
 export const syncActiveProfileTargetSkillIds = async (): Promise<boolean> => false;
+export const clearLegacyDefaultCountryFilters = async (): Promise<boolean> => {
+  const profile = await SearchProfileModel.findOne({ enabled: true }).sort({ updatedAt: -1 });
+  if (!profile || !sameStringSet(profile.countries, TARGET_COUNTRY_CODES)) return false;
+
+  profile.countries = [];
+  await profile.save();
+  return true;
+};
 
 export const buildSearchProfileCreatePayload = (input: unknown): SearchProfileCreatePayload => {
   const parsed = searchProfileSchema.parse(input);
