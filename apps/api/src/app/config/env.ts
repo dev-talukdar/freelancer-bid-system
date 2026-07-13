@@ -24,7 +24,7 @@ const envSchema = z.object({
   FREELANCER_API_BASE_URL: z.string().url().default('https://www.freelancer.com/api'),
   EXTENSION_ID: z.string().optional(),
   LOCAL_API_SECRET: z.string().min(16),
-  LOG_LEVEL: z.string().default('info'),
+  LOG_LEVEL: z.string().default('silent'),
   DETECTED_PROJECT_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
   DEBUG_FREELANCER_PROJECT_ID: z.coerce.number().int().positive().optional(),
 });

@@ -18,9 +18,10 @@ await seedSearchProfile();
 await syncActiveProfileTargetCountryCodes();
 await syncActiveProfileTargetCurrencies();
 monitor.start();
-const server = buildApp().listen(env.PORT, env.HOST, () =>
-  logger.info({ host: env.HOST, port: env.PORT }, 'api listening'),
-);
+const server = buildApp().listen(env.PORT, env.HOST, () => {
+  console.log(`Server is running on port ${env.PORT}`);
+});
+
 const shutdown = async () => {
   monitor.stop();
   server.close();
