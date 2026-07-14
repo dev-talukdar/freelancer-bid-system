@@ -81,17 +81,36 @@ const COUNTRY_CODE_BY_NORMALIZED_NAME = new Map(
   ALLOWED_COUNTRIES.map((country) => [normalize(country.name), country.code]),
 );
 
-const normalizeCountryFilterValue = (value: string): string | undefined => {
+const COUNTRY_CODE_ALIASES = new Map([['UK', 'GB']]);
+
+const normalizeAllowedCountryCode = (value: string | undefined): string | undefined => {
   const normalizedCode = normalizeCountryCode(value);
-  if (normalizedCode !== undefined && normalizedCode.length === 2) return normalizedCode;
+  if (normalizedCode === undefined) return undefined;
+  return COUNTRY_CODE_ALIASES.get(normalizedCode) ?? normalizedCode;
+};
+
+const normalizeCountryFilterValue = (value: string): string | undefined => {
+  const normalizedCode = normalizeAllowedCountryCode(value);
+  if (
+    normalizedCode !== undefined &&
+    ALLOWED_COUNTRIES.some((country) => country.code === normalizedCode)
+  ) {
+    return normalizedCode;
+  }
   return COUNTRY_CODE_BY_NORMALIZED_NAME.get(normalize(value));
 };
 
-const projectClientCountryCode = (project: NormalizedProject): string | undefined =>
-  normalizeCountryCode(project.clientCountryCode) ??
-  (project.clientCountry === undefined
-    ? undefined
-    : COUNTRY_CODE_BY_NORMALIZED_NAME.get(normalize(project.clientCountry)));
+const projectClientCountryCode = (project: NormalizedProject): string | undefined => {
+  const normalizedClientCountryCode = normalizeAllowedCountryCode(project.clientCountryCode);
+  if (normalizedClientCountryCode !== undefined) return normalizedClientCountryCode;
+
+  if (project.clientCountry === undefined) return undefined;
+
+  return (
+    normalizeCountryFilterValue(project.clientCountry) ??
+    COUNTRY_CODE_BY_NORMALIZED_NAME.get(normalize(project.clientCountry))
+  );
+};
 
 const isDefinedNumber = (value: number | null | undefined): value is number =>
   typeof value === 'number' && Number.isFinite(value);
@@ -219,6 +238,12 @@ export function projectSkipReason(
 
   const projectCurrencyCode = normalizeCurrencyCode(project.currency?.code);
   if (projectCurrencyCode === undefined || !ALLOWED_CURRENCY_CODES.has(projectCurrencyCode))
+    return 'currencyMismatch';
+
+  const profileCurrencies = profile.currencies
+    .map(normalizeCurrencyCode)
+    .filter((code): code is string => code !== undefined);
+  if (profileCurrencies.length > 0 && !profileCurrencies.includes(projectCurrencyCode))
     return 'currencyMismatch';
 
   const profileLanguages = profile.languages.map(normalized);

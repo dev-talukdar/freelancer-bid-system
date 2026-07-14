@@ -32,16 +32,16 @@ export const TARGET_SKILL_IDS = [
   9, // JavaScript
   335, // HTML
   500, // Node.js
-  1088, // Full Stack Development
-  1827, // Website Build
-  2839, // Website Development
-  1031, // Web Development
   759, // React.js
+  1031, // Web Development
+  1088, // Full Stack Development
   1092, // Backend Development
   1093, // Frontend Development
+  1827, // Website Build
   2376, // Next.js
   2382, // Web Application
-  979, // TypeScript
+  2695, // SaaS
+  2839, // Website Development
 ] as const;
 
 const targetSkillIds = (): number[] => [...TARGET_SKILL_IDS];

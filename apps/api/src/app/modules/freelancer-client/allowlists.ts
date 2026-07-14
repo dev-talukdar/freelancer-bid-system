@@ -78,6 +78,7 @@ export const ALLOWED_COUNTRIES = [
   { name: 'Oman', code: 'OM' },
   { name: 'Paraguay', code: 'PY' },
   { name: 'Peru', code: 'PE' },
+  { name: 'Poland', code: 'PL' },
   { name: 'Portugal', code: 'PT' },
   { name: 'Qatar', code: 'QA' },
   { name: 'Romania', code: 'RO' },
