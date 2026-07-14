@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/require-await */
 import { searchProfileSchema, type SearchProfileInput } from '@fbs/shared';
 
+import { ALLOWED_COUNTRIES } from '../freelancer-client/allowlists.js';
 import { SearchProfileModel } from './model.js';
 
 interface SearchProfileCreatePayload {
@@ -44,6 +45,7 @@ export const TARGET_SKILL_IDS = [
 ] as const;
 
 const targetSkillIds = (): number[] => [...TARGET_SKILL_IDS];
+export const defaultCountryCodes = (): string[] => ALLOWED_COUNTRIES.map((country) => country.code);
 export const syncActiveProfileTargetSkillIds = async (): Promise<boolean> => false;
 export const buildSearchProfileCreatePayload = (input: unknown): SearchProfileCreatePayload => {
   const parsed = searchProfileSchema.parse(input);
@@ -163,7 +165,13 @@ export const buildSearchProfileUpdatePayload = (input: unknown): SearchProfileUp
 export const seedSearchProfile = async (): Promise<void> => {
   const existingProfile = await SearchProfileModel.exists({});
 
-  if (existingProfile) return;
+  if (existingProfile) {
+    await SearchProfileModel.updateMany(
+      { countries: { $size: 0 } },
+      { $set: { countries: defaultCountryCodes() } },
+    );
+    return;
+  }
 
   await SearchProfileModel.create(
     buildSearchProfileCreatePayload({
@@ -173,7 +181,7 @@ export const seedSearchProfile = async (): Promise<void> => {
       keywords: [],
       excludedKeywords: [],
       jobIds: targetSkillIds(),
-      countries: [],
+      countries: defaultCountryCodes(),
       currencies: [],
       languages: [],
       projectTypes: ['fixed', 'hourly'],

@@ -1,4 +1,8 @@
-import { DEFAULT_POLL_INTERVAL_SECONDS, type ProjectType } from '@fbs/shared';
+import {
+  DEFAULT_MAXIMUM_PROJECT_AGE_MINUTES,
+  DEFAULT_POLL_INTERVAL_SECONDS,
+  type ProjectType,
+} from '@fbs/shared';
 import type { Types } from 'mongoose';
 import { logger } from '../../config/logger.js';
 import { env } from '../../config/env.js';
@@ -134,7 +138,8 @@ export function buildMonitorSearchParams(
   profile: SearchProfileDocument,
   checkpointFromTime?: number,
 ): ProjectSearchParams {
-  const maximumProjectAgeMinutes = profile.maximumProjectAgeMinutes ?? 10;
+  const maximumProjectAgeMinutes =
+    profile.maximumProjectAgeMinutes ?? DEFAULT_MAXIMUM_PROJECT_AGE_MINUTES;
   const profileFromTime = unixSecondsNow() - maximumProjectAgeMinutes * 60;
   const fromTime = checkpointFromTime ?? profileFromTime;
 
@@ -154,6 +159,7 @@ export function buildMonitorSearchParams(
 
   if (profile.projectTypes.length > 0) params.project_types = profile.projectTypes;
   if (profile.jobIds.length > 0) params.jobs = profile.jobIds;
+  if (profile.countries.length > 0) params.countries = profile.countries;
   if (profile.languages.length > 0) params.languages = profile.languages;
   if (hasFiniteNumber(profile.minimumFixedBudget)) params.min_price = profile.minimumFixedBudget;
   if (hasFiniteNumber(profile.maximumFixedBudget)) params.max_price = profile.maximumFixedBudget;

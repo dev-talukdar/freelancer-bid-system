@@ -33,6 +33,7 @@ import type { NormalizedProject } from '../src/app/modules/freelancer-client/typ
 import {
   TARGET_SKILL_IDS,
   buildSearchProfileCreatePayload,
+  defaultCountryCodes,
   seedSearchProfile,
   syncActiveProfileTargetSkillIds,
 } from '../src/app/modules/search-profile/service.js';
@@ -49,7 +50,7 @@ const activeProfile: ProjectFilterProfile = {
   keywords: ['react'],
   excludedKeywords: [],
   jobIds: [],
-  countries: [],
+  countries: defaultCountryCodes(),
   currencies: [],
   languages: ['en'],
   projectTypes: ['fixed', 'hourly'],
@@ -127,7 +128,7 @@ describe('api foundations', () => {
     expect(monitorQs.get('limit')).toBe('100');
     expect(monitorQs.get('from_time')).toBe(String(Math.floor(Date.now() / 1000) - 30 * 60));
     expect(monitorQs.getAll('jobs[]')).toEqual(['9', '500']);
-    expect(monitorQs.getAll('countries[]')).toEqual([]);
+    expect(monitorQs.getAll('countries[]')).toEqual(['us', 'gb']);
     expect(monitorQs.getAll('languages[]')).toEqual(['en']);
     expect(monitorQs.get('min_price')).toBe('100');
     expect(monitorQs.get('max_price')).toBe('1000');
@@ -578,16 +579,22 @@ describe('mongoose payload builders', () => {
     updateOne.mockRestore();
   });
 
-  it('does not run profile sync when profiles already exist', async () => {
+  it('backfills missing countries without creating a profile when profiles already exist', async () => {
     const exists = vi
       .spyOn(SearchProfileModel, 'exists')
       .mockResolvedValue({ _id: new Types.ObjectId() } as never);
+    const updateMany = vi.spyOn(SearchProfileModel, 'updateMany').mockResolvedValue({} as never);
     const create = vi.spyOn(SearchProfileModel, 'create');
 
     await seedSearchProfile();
 
     expect(create).not.toHaveBeenCalled();
+    expect(updateMany).toHaveBeenCalledWith(
+      { countries: { $size: 0 } },
+      { $set: { countries: defaultCountryCodes() } },
+    );
     exists.mockRestore();
+    updateMany.mockRestore();
     create.mockRestore();
   });
 
@@ -598,7 +605,7 @@ describe('mongoose payload builders', () => {
       keywords: [],
       excludedKeywords: [],
       jobIds: [...TARGET_SKILL_IDS],
-      countries: [],
+      countries: defaultCountryCodes(),
       currencies: [],
       languages: [],
       projectTypes: ['fixed', 'hourly'],
