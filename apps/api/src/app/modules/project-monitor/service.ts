@@ -1,3 +1,5 @@
+ 
+ 
 import {
   DEFAULT_MAXIMUM_PROJECT_AGE_MINUTES,
   DEFAULT_POLL_INTERVAL_SECONDS,
@@ -358,6 +360,7 @@ export class ProjectMonitor {
             $lt: new Date(Date.now() - env.DETECTED_PROJECT_RETENTION_DAYS * 86400_000),
           },
         });
+         
         const pruneResult = await pruneOldDetectedProjects();
         const newestActivity = projects.reduce<Date | undefined>((latest, project) => {
           if (!project) return latest;
