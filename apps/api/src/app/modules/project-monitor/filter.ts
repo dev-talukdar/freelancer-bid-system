@@ -1,6 +1,12 @@
 import type { SearchProfileDocument } from '../search-profile/model.js';
 import type { NormalizedProject } from '../freelancer-client/types.js';
 import { logger } from '../../config/logger.js';
+import {
+  ALLOWED_COUNTRY_CODES,
+  ALLOWED_CURRENCY_CODES,
+  normalizeCountryCode,
+  normalizeCurrencyCode,
+} from '../freelancer-client/allowlists.js';
 
 export type SkipReason =
   | 'invalidShape'
@@ -69,40 +75,6 @@ const normalized = normalize;
 const compact = (value: string): string => value.replace(/\s+/g, '');
 const includesNormalized = (source: string, normalizedNeedle: string): boolean =>
   source.includes(normalizedNeedle) || compact(source).includes(compact(normalizedNeedle));
-
-const COUNTRY_ALIAS_GROUPS = [
-  ['tw', 'taiwan'],
-  ['hk', 'hong kong'],
-  ['nz', 'new zealand'],
-  ['il', 'israel'],
-  ['sa', 'saudi arabia'],
-  ['nl', 'netherlands', 'the netherlands', 'holland'],
-  ['gr', 'greece'],
-  ['es', 'spain'],
-  ['it', 'italy'],
-  ['ie', 'ireland'],
-  ['sg', 'singapore'],
-  ['pt', 'portugal'],
-  ['se', 'sweden'],
-  ['ch', 'switzerland'],
-  ['pl', 'poland'],
-  ['be', 'belgium'],
-  ['fr', 'france'],
-  ['de', 'germany'],
-  ['gb', 'united kingdom', 'uk', 'u k', 'great britain', 'england'],
-  ['au', 'australia'],
-  ['ca', 'canada'],
-  ['us', 'united states', 'united states of america', 'usa', 'u s a', 'america'],
-] as const;
-
-const countryTokens = (value: string | undefined): string[] => {
-  if (value === undefined) return [];
-  const token = normalized(value);
-  const aliasGroup = COUNTRY_ALIAS_GROUPS.find((group) =>
-    (group as readonly string[]).includes(token),
-  );
-  return aliasGroup === undefined ? [token] : [...aliasGroup];
-};
 
 const isDefinedNumber = (value: number | null | undefined): value is number =>
   typeof value === 'number' && Number.isFinite(value);
@@ -219,20 +191,13 @@ export function projectSkipReason(
     return 'jobMismatch';
   }
 
-  const profileCountries = profile.countries.flatMap(countryTokens);
-  const clientCountries = [project.clientCountryCode, project.clientCountry].flatMap(countryTokens);
+  const clientCountryCode = normalizeCountryCode(project.clientCountryCode);
+  if (clientCountryCode === undefined || !ALLOWED_COUNTRY_CODES.has(clientCountryCode))
+    return 'countryMismatch';
 
-  const matchesCountry =
-    profileCountries.length === 0 ||
-    clientCountries.some((clientCountry) => profileCountries.includes(clientCountry));
-  if (!matchesCountry) return 'countryMismatch';
-
-  const profileCurrencies = profile.currencies.map(normalized);
-  const projectCurrency = project.currency?.code;
-  const matchesCurrency =
-    profileCurrencies.length === 0 ||
-    (projectCurrency !== undefined && profileCurrencies.includes(normalized(projectCurrency)));
-  if (!matchesCurrency) return 'currencyMismatch';
+  const projectCurrencyCode = normalizeCurrencyCode(project.currency?.code);
+  if (projectCurrencyCode === undefined || !ALLOWED_CURRENCY_CODES.has(projectCurrencyCode))
+    return 'currencyMismatch';
 
   const profileLanguages = profile.languages.map(normalized);
   const matchesLanguage =

@@ -6,6 +6,7 @@ import { FreelancerClient } from '../freelancer-client/client.js';
 import { DetectedProjectModel } from '../detected-project/model.js';
 import { createSkipReasons, projectActivityDate, projectSkipReason } from './filter.js';
 import { PollLock } from './lock.js';
+import { ProjectMonitorCheckpointModel } from './checkpoint-model.js';
 
 import type { NormalizedProject, ProjectSearchParams } from '../freelancer-client/types.js';
 import type { SearchProfileDocument } from '../search-profile/model.js';
@@ -122,14 +123,20 @@ export function buildDetectedProjectCreatePayload(
   return payload;
 }
 
+const CHECKPOINT_KEY = 'freelancer-project-monitor';
+const OVERLAP_SECONDS = 5 * 60;
 const unixSecondsNow = () => Math.floor(Date.now() / 1000);
 
 const hasFiniteNumber = (value: number | null | undefined): value is number =>
   typeof value === 'number' && Number.isFinite(value);
 
-export function buildMonitorSearchParams(profile: SearchProfileDocument): ProjectSearchParams {
+export function buildMonitorSearchParams(
+  profile: SearchProfileDocument,
+  checkpointFromTime?: number,
+): ProjectSearchParams {
   const maximumProjectAgeMinutes = profile.maximumProjectAgeMinutes ?? 10;
-  const fromTime = unixSecondsNow() - maximumProjectAgeMinutes * 60;
+  const profileFromTime = unixSecondsNow() - maximumProjectAgeMinutes * 60;
+  const fromTime = checkpointFromTime ?? profileFromTime;
 
   const params: ProjectSearchParams = {
     from_time: fromTime,
@@ -147,7 +154,6 @@ export function buildMonitorSearchParams(profile: SearchProfileDocument): Projec
 
   if (profile.projectTypes.length > 0) params.project_types = profile.projectTypes;
   if (profile.jobIds.length > 0) params.jobs = profile.jobIds;
-  if (profile.countries.length > 0) params.countries = profile.countries;
   if (profile.languages.length > 0) params.languages = profile.languages;
   if (hasFiniteNumber(profile.minimumFixedBudget)) params.min_price = profile.minimumFixedBudget;
   if (hasFiniteNumber(profile.maximumFixedBudget)) params.max_price = profile.maximumFixedBudget;
@@ -226,8 +232,8 @@ export class ProjectMonitor {
             enabled: profile.enabled,
             maximumProjectAgeMinutes: profile.maximumProjectAgeMinutes,
             jobIds: profile.jobIds,
-            countries: profile.countries,
-            currencies: profile.currencies,
+            allowedCountryFilter: 'authoritative allowlist',
+            allowedCurrencyFilter: 'authoritative allowlist',
             languages: profile.languages,
             projectTypes: profile.projectTypes,
             maximumBidCount: profile.maximumBidCount,
@@ -242,7 +248,15 @@ export class ProjectMonitor {
         // the local matcher as the source of truth for currencies, budgets, excluded keywords, local
         // projects, bid counts, and any response-shape differences. Freelancer documents
         // reverse_sort=true as ascending order, so keep it false for latest-first results.
-        const searchParams = buildMonitorSearchParams(profile);
+        const checkpoint = await ProjectMonitorCheckpointModel.findOne({
+          key: CHECKPOINT_KEY,
+        }).lean();
+        const savedFromTime = checkpoint?.lastSuccessfulFromTime;
+        const checkpointFromTime =
+          typeof savedFromTime === 'number'
+            ? Math.max(0, savedFromTime - OVERLAP_SECONDS)
+            : undefined;
+        const searchParams = buildMonitorSearchParams(profile, checkpointFromTime);
         const projects = await this.client.activeProjects(searchParams);
 
         logProjectFetchDiagnostics(profile, projects);
@@ -273,9 +287,9 @@ export class ProjectMonitor {
                 projectSkillNames: project.jobs.map((job) => job.name),
                 configuredSkillIds: profile.jobIds,
                 country: project.clientCountryCode ?? project.clientCountry,
-                configuredCountries: profile.countries,
+                countryFilter: 'authoritative allowlist',
                 currency: project.currency?.code,
-                configuredCurrencies: profile.currencies,
+                currencyFilter: 'authoritative allowlist',
                 language: project.language,
                 configuredLanguages: profile.languages,
                 projectType: project.type,
@@ -306,6 +320,22 @@ export class ProjectMonitor {
             $lt: new Date(Date.now() - env.DETECTED_PROJECT_RETENTION_DAYS * 86400_000),
           },
         });
+        const newestActivity = projects.reduce<Date | undefined>((latest, project) => {
+          if (!project) return latest;
+          const activityAt = projectActivityDate(project);
+          if (activityAt === undefined) return latest;
+          return latest === undefined || activityAt > latest ? activityAt : latest;
+        }, undefined);
+        await ProjectMonitorCheckpointModel.findOneAndUpdate(
+          { key: CHECKPOINT_KEY },
+          {
+            $set: {
+              lastSuccessfulFromTime: unixSecondsNow(),
+              ...(newestActivity === undefined ? {} : { lastSeenProjectActivity: newestActivity }),
+            },
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true },
+        );
         this.state.lastSuccessfulPoll = new Date();
         this.state.lastPollingError = undefined;
         const skipped = Object.values(skipReasons).reduce((total, count) => total + count, 0);

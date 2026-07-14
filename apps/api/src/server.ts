@@ -2,19 +2,17 @@ import { buildApp } from './app.js';
 import { env } from './app/config/env.js';
 import { logger } from './app/config/logger.js';
 import { connectMongo, disconnectMongo } from './app/db/mongoose.js';
-import {
-  clearLegacyDefaultCountryFilters,
-  seedSearchProfile,
-} from './app/modules/search-profile/service.js';
+import { seedSearchProfile } from './app/modules/search-profile/service.js';
+import { validateFreelancerAllowlists } from './app/modules/freelancer-client/allowlists.js';
 import { monitor } from './app/modules/project-monitor/service.js';
 process.on('unhandledRejection', (e) => logger.fatal({ err: e }, 'unhandled rejection'));
 process.on('uncaughtException', (e) => {
   logger.fatal({ err: e }, 'uncaught exception');
   process.exit(1);
 });
+validateFreelancerAllowlists();
 await connectMongo();
 await seedSearchProfile();
-await clearLegacyDefaultCountryFilters();
 monitor.start();
 const server = buildApp().listen(env.PORT, env.HOST, () =>
   logger.info({ host: env.HOST, port: env.PORT }, 'api listening'),
