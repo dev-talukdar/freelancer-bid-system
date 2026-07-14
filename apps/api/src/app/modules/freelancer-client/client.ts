@@ -8,11 +8,21 @@ import {
   type RateLimitState,
 } from './rate-limit.js';
 import { normalizeFreelancerProject } from './normalize.js';
-import type { FreelancerProject, ProjectSearchParams } from './types.js';
+import type {
+  FreelancerActiveProjectsResult,
+  FreelancerProject,
+  FreelancerUser,
+  ProjectSearchParams,
+} from './types.js';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const ACTIVE_PROJECTS_PATH = '/projects/0.1/projects/active/';
-const MAX_ACTIVE_PROJECT_PAGES = 3;
+const MAX_ACTIVE_PROJECT_PAGES = 100;
+
+type WrappedActiveProjectsResult = { result?: FreelancerActiveProjectsResult };
+const hasWrappedResult = (
+  data: FreelancerActiveProjectsResult | WrappedActiveProjectsResult,
+): data is WrappedActiveProjectsResult => 'result' in data;
 
 export class FreelancerClient {
   public rateLimitState: RateLimitState = { windows: [] };
@@ -71,17 +81,32 @@ export class FreelancerClient {
 
     for (let page = 0; page < MAX_ACTIVE_PROJECT_PAGES; page++) {
       const pageParams = { ...params, limit: pageSize, offset: startOffset + page * pageSize };
-      const data = await this.get<
-        { result?: { projects?: FreelancerProject[] } } | { projects?: FreelancerProject[] }
-      >(ACTIVE_PROJECTS_PATH, buildFreelancerQuery(pageParams));
-      const pageProjects =
-        ('result' in data
-          ? data.result?.projects
-          : (data as { projects?: FreelancerProject[] }).projects) ?? [];
-      projects.push(...pageProjects);
+      const data = await this.get<WrappedActiveProjectsResult | FreelancerActiveProjectsResult>(
+        ACTIVE_PROJECTS_PATH,
+        buildFreelancerQuery(pageParams),
+      );
+      const result: FreelancerActiveProjectsResult | undefined = hasWrappedResult(data)
+        ? data.result
+        : data;
+      const pageProjects: FreelancerProject[] = result?.projects ?? [];
+      const users = result?.users ?? {};
+      projects.push(
+        ...pageProjects.map(
+          (project) =>
+            ({
+              ...project,
+              __owner: users[String(project.owner_id ?? project.owner?.id ?? '')],
+            }) as FreelancerProject & { __owner?: FreelancerUser },
+        ),
+      );
       if (pageProjects.length < pageSize) break;
     }
 
-    return projects.map(normalizeFreelancerProject);
+    return projects.map((project) => {
+      const { __owner, ...freelancerProject } = project as FreelancerProject & {
+        __owner?: FreelancerUser;
+      };
+      return normalizeFreelancerProject(freelancerProject, __owner);
+    });
   }
 }
