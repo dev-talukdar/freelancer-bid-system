@@ -47,7 +47,7 @@ export const TARGET_SKILL_IDS = [
 const targetSkillIds = (): number[] => [...TARGET_SKILL_IDS];
 export const DEFAULT_PROFILE_FILTERS = {
   languages: ['en'],
-  minimumFixedBudget: 50,
+  minimumFixedBudget: 10,
   maximumFixedBudget: 50000,
   minimumHourlyRate: 20,
   maximumHourlyRate: 100,
