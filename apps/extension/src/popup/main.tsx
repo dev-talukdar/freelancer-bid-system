@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import type { DetectedProjectDto, HealthDto } from '@fbs/shared';
 import { toFreelancerProjectUrl } from '@fbs/shared';
 import { LocalApiClient } from '../services/local-api.js';
-import { getSettings, saveSettings } from '../storage/settings.js';
+import { clearNotifiedIds, getSettings, saveSettings } from '../storage/settings.js';
 import './style.css';
 import { ApiKeyStatus, buildPopupViewModel, MonitorStatus, trimSecret } from './view-model.js';
 import { formatBangladeshDateTime, formatRelativeTime } from '../utils/time.js';
@@ -130,6 +130,7 @@ function App() {
   const [isPolling, setIsPolling] = useState(false);
   const [isSavingSecret, setIsSavingSecret] = useState(false);
   const [actionPending, setActionPending] = useState(false);
+  const [isClearingProjects, setIsClearingProjects] = useState(false);
   const [now, setNow] = useState(() => new Date());
 
   const load = async () => {
@@ -210,6 +211,26 @@ function App() {
       setFeedback('Secret save failed');
     } finally {
       setIsSavingSecret(false);
+    }
+  };
+
+  const clearProjects = async () => {
+    setIsClearingProjects(true);
+    setFeedback('');
+    try {
+      const api = new LocalApiClient(await getSettings());
+      const result = await api.clearDetectedProjects();
+      await clearNotifiedIds();
+      setProjects([]);
+      setFeedback(
+        `Cleared ${result.deletedCount} stored projects. New detections will appear only when posted.`,
+      );
+      await load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Clear failed');
+      setFeedback('Clear failed');
+    } finally {
+      setIsClearingProjects(false);
     }
   };
 
@@ -309,7 +330,19 @@ function App() {
       </section>
 
       <section className="recent">
-        <h2>Recent projects</h2>
+        <div className="recent-header">
+          <h2>Recent projects</h2>
+          <button
+            className="btn btn-danger"
+            type="button"
+            disabled={isClearingProjects || !savedSecret}
+            onClick={() => {
+              void clearProjects();
+            }}
+          >
+            {isClearingProjects ? 'Clearing…' : 'Clear projects'}
+          </button>
+        </div>
         {projects.length === 0 ? (
           <div className="empty">
             <strong>No recent projects yet</strong>

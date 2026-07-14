@@ -9,6 +9,7 @@ import {
   activateProfile,
 } from '../modules/search-profile/service.js';
 import {
+  clearDetectedProjects,
   listDetected,
   listUnnotified,
   markNotified,
@@ -112,6 +113,13 @@ v1Router.get('/detected-projects/unnotified', async (req, res, next) => {
   try {
     const query = unnotifiedProjectsQuerySchema.parse(req.query);
     ok(res, 'Unnotified detected projects loaded', await listUnnotified(query.limit));
+  } catch (e) {
+    next(e);
+  }
+});
+v1Router.delete('/detected-projects', async (_req, res, next) => {
+  try {
+    ok(res, 'Detected projects cleared', await clearDetectedProjects());
   } catch (e) {
     next(e);
   }
