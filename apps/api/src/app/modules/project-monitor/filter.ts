@@ -1,8 +1,8 @@
+import { DEFAULT_MAXIMUM_PROJECT_AGE_MINUTES } from '@fbs/shared';
 import type { SearchProfileDocument } from '../search-profile/model.js';
 import type { NormalizedProject } from '../freelancer-client/types.js';
 import { logger } from '../../config/logger.js';
 import {
-  ALLOWED_COUNTRY_CODES,
   ALLOWED_CURRENCY_CODES,
   normalizeCountryCode,
   normalizeCurrencyCode,
@@ -131,7 +131,7 @@ export function projectSkipReason(
 
   if (project.deleted === true) return 'deleted';
   if (!isProjectOpen(project)) return 'notOpen';
-  const maximumAgeMinutes = profile.maximumProjectAgeMinutes ?? 10;
+  const maximumAgeMinutes = profile.maximumProjectAgeMinutes ?? DEFAULT_MAXIMUM_PROJECT_AGE_MINUTES;
   const maximumAgeMs = maximumAgeMinutes * 60 * 1000;
   if (Date.now() - activityAt.getTime() > maximumAgeMs) return 'tooOld';
   if (project.local === true && !profile.allowLocalProjects) return 'localProject';
@@ -191,9 +191,14 @@ export function projectSkipReason(
     return 'jobMismatch';
   }
 
-  const clientCountryCode = normalizeCountryCode(project.clientCountryCode);
-  if (clientCountryCode === undefined || !ALLOWED_COUNTRY_CODES.has(clientCountryCode))
-    return 'countryMismatch';
+  const profileCountries = profile.countries
+    .map(normalizeCountryCode)
+    .filter((code): code is string => code !== undefined);
+  if (profileCountries.length > 0) {
+    const clientCountryCode = normalizeCountryCode(project.clientCountryCode);
+    if (clientCountryCode === undefined || !profileCountries.includes(clientCountryCode))
+      return 'countryMismatch';
+  }
 
   const projectCurrencyCode = normalizeCurrencyCode(project.currency?.code);
   if (projectCurrencyCode === undefined || !ALLOWED_CURRENCY_CODES.has(projectCurrencyCode))
