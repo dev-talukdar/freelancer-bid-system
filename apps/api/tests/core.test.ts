@@ -343,11 +343,33 @@ describe('freelancer project normalization and matching', () => {
     ).toBeUndefined();
   });
 
-  it('filters projects by authoritative allowed currencies without using profile currency choices', () => {
-    expect(projectMatches({ ...activeProfile, currencies: ['EUR'] }, realisticProject)).toBe(true);
+  it('filters projects by configured currency choices after validating the authoritative allowlist', () => {
+    expect(projectMatches({ ...activeProfile, currencies: ['USD'] }, realisticProject)).toBe(true);
+    expect(projectSkipReason({ ...activeProfile, currencies: ['EUR'] }, realisticProject)).toBe(
+      'currencyMismatch',
+    );
     expect(
       projectSkipReason(activeProfile, { ...realisticProject, currency: { code: 'INR' } }),
     ).toBe('currencyMismatch');
+  });
+
+  it('accepts common UK country-code aliases for employer country matching', () => {
+    expect(projectMatches(activeProfile, { ...realisticProject, clientCountryCode: 'UK' })).toBe(
+      true,
+    );
+    expect(
+      projectMatches(
+        { ...activeProfile, countries: ['UK'] },
+        { ...realisticProject, clientCountryCode: 'GB' },
+      ),
+    ).toBe(true);
+    expect(
+      projectMatches(activeProfile, {
+        ...realisticProject,
+        clientCountry: 'uk',
+        clientCountryCode: undefined,
+      }),
+    ).toBe(true);
   });
 
   it('does not confuse GBP currency metadata country UK with employer country GB', () => {
@@ -359,12 +381,12 @@ describe('freelancer project normalization and matching', () => {
       }),
     ).toBe(true);
     expect(
-      projectSkipReason(activeProfile, {
+      projectMatches(activeProfile, {
         ...realisticProject,
         currency: { id: 4, code: 'GBP', country: 'UK' },
         clientCountryCode: 'UK',
       }),
-    ).toBe('countryMismatch');
+    ).toBe(true);
   });
 
   it('handles nullable numeric filters and reports accurate reasons', () => {
@@ -574,6 +596,38 @@ describe('freelancer project normalization and matching', () => {
 });
 
 describe('mongoose payload builders', () => {
+  it('keeps seeded monitor filters aligned with the Freelancer search URL selections', () => {
+    expect([...TARGET_SKILL_IDS]).toEqual([
+      9, 335, 500, 759, 1031, 1088, 1092, 1093, 1827, 2376, 2382, 2695, 2839,
+    ]);
+    expect(defaultCountryCodes()).toEqual(
+      expect.arrayContaining([
+        'TW',
+        'HK',
+        'NZ',
+        'IL',
+        'SA',
+        'NL',
+        'GR',
+        'ES',
+        'IT',
+        'IE',
+        'SG',
+        'PT',
+        'SE',
+        'CH',
+        'PL',
+        'BE',
+        'FR',
+        'DE',
+        'GB',
+        'AU',
+        'CA',
+        'US',
+      ]),
+    );
+  });
+
   it('seeds configured target skill IDs into new profiles', () => {
     const payload = buildSearchProfileCreatePayload({
       name: 'Target skills',
