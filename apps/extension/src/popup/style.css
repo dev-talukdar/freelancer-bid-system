@@ -197,6 +197,11 @@ p {
   color: #334155;
   border-color: #e2e8f0;
 }
+.btn-danger {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
 .btn-wide {
   flex: 1;
 }
@@ -221,8 +226,15 @@ p {
 .controls {
   margin-bottom: 12px;
 }
+.recent-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
 .recent h2 {
-  margin: 0 0 8px;
+  margin: 0;
 }
 .empty {
   padding: 16px;

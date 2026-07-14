@@ -1,4 +1,4 @@
-import type { DetectedProjectDto } from '@fbs/shared';
+import { DEFAULT_MAXIMUM_PROJECT_AGE_MINUTES, type DetectedProjectDto } from '@fbs/shared';
 import { AppError } from '../../error/app-error.js';
 import { getActiveProfile } from '../search-profile/service.js';
 import { DetectedProjectModel } from './model.js';
@@ -53,8 +53,27 @@ const serializeProject = (project: LeanDetectedProject): DetectedProjectDto => {
   return dto;
 };
 
+const recentProjectFilter = (maximumProjectAgeMinutes = DEFAULT_MAXIMUM_PROJECT_AGE_MINUTES) => {
+  const cutoff = new Date(Date.now() - maximumProjectAgeMinutes * 60_000);
+  return {
+    $or: [
+      { timeUpdated: { $gte: cutoff } },
+      { timeSubmitted: { $gte: cutoff } },
+      {
+        timeSubmitted: { $exists: false },
+        timeUpdated: { $exists: false },
+        detectedAt: { $gte: cutoff },
+      },
+    ],
+  };
+};
+
 export async function listDetected(page = 1, pageSize = 20, unreadOnly = false) {
-  const filter = unreadOnly ? { readAt: { $exists: false } } : {};
+  const activeProfile = await getActiveProfile();
+  const filter = {
+    ...recentProjectFilter(activeProfile?.maximumProjectAgeMinutes),
+    ...(unreadOnly ? { readAt: { $exists: false } } : {}),
+  };
   const [items, total, unreadCount] = await Promise.all([
     DetectedProjectModel.find(filter)
       .sort({ detectedAt: -1 })
@@ -84,7 +103,10 @@ export async function listUnnotified(limit = 50) {
     return { items: [], notification, limit };
   }
 
-  const items = await DetectedProjectModel.find({ notifiedAt: { $exists: false } })
+  const items = await DetectedProjectModel.find({
+    notifiedAt: { $exists: false },
+    ...recentProjectFilter(activeProfile?.maximumProjectAgeMinutes),
+  })
     .sort({ detectedAt: 1 })
     .limit(limit)
     .lean();
@@ -94,6 +116,30 @@ export async function listUnnotified(limit = 50) {
     notification,
     limit,
   };
+}
+
+export async function clearDetectedProjects() {
+  const result = await DetectedProjectModel.deleteMany({});
+  return { deletedCount: result.deletedCount ?? 0 };
+}
+
+export async function pruneOldDetectedProjects() {
+  const activeProfile = await getActiveProfile();
+  const maximumProjectAgeMinutes =
+    activeProfile?.maximumProjectAgeMinutes ?? DEFAULT_MAXIMUM_PROJECT_AGE_MINUTES;
+  const staleFilter = { $nor: [recentProjectFilter(maximumProjectAgeMinutes)] };
+  const staleCount = await DetectedProjectModel.countDocuments(staleFilter);
+  if (staleCount === 0) return { deletedCount: 0, staleCount };
+  const deleteCount = Math.ceil(staleCount / 2);
+  const oldProjects = await DetectedProjectModel.find(staleFilter)
+    .sort({ detectedAt: 1 })
+    .limit(deleteCount)
+    .select({ _id: 1 })
+    .lean();
+  const result = await DetectedProjectModel.deleteMany({
+    _id: { $in: oldProjects.map((project) => project._id) },
+  });
+  return { deletedCount: result.deletedCount ?? 0, staleCount };
 }
 
 export async function markNotified(id: string) {

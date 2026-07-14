@@ -3,7 +3,7 @@ export const LOCAL_API_BASE_URL = 'http://127.0.0.1:4300';
 export const FREELANCER_PROJECT_BASE_URL = 'https://www.freelancer.com/projects/';
 export const MIN_POLL_INTERVAL_SECONDS = 20;
 export const DEFAULT_POLL_INTERVAL_SECONDS = 30;
-export const DEFAULT_MAXIMUM_PROJECT_AGE_MINUTES = 600;
+export const DEFAULT_MAXIMUM_PROJECT_AGE_MINUTES = 120;
 export const projectTypeSchema = z.enum(['fixed', 'hourly']);
 export type ProjectType = z.infer<typeof projectTypeSchema>;
 export const searchProfileSchema = z.object({
@@ -93,6 +93,7 @@ export type MonitorSkipReason =
   | 'keywordMismatch'
   | 'excludedKeyword'
   | 'jobMismatch'
+  | 'countryUnavailable'
   | 'countryMismatch'
   | 'languageMismatch'
   | 'currencyMismatch'
