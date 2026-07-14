@@ -3,6 +3,7 @@ import type { SearchProfileDocument } from '../search-profile/model.js';
 import type { NormalizedProject } from '../freelancer-client/types.js';
 import { logger } from '../../config/logger.js';
 import {
+  ALLOWED_COUNTRIES,
   ALLOWED_CURRENCY_CODES,
   normalizeCountryCode,
   normalizeCurrencyCode,
@@ -75,6 +76,22 @@ const normalized = normalize;
 const compact = (value: string): string => value.replace(/\s+/g, '');
 const includesNormalized = (source: string, normalizedNeedle: string): boolean =>
   source.includes(normalizedNeedle) || compact(source).includes(compact(normalizedNeedle));
+
+const COUNTRY_CODE_BY_NORMALIZED_NAME = new Map(
+  ALLOWED_COUNTRIES.map((country) => [normalize(country.name), country.code]),
+);
+
+const normalizeCountryFilterValue = (value: string): string | undefined => {
+  const normalizedCode = normalizeCountryCode(value);
+  if (normalizedCode !== undefined && normalizedCode.length === 2) return normalizedCode;
+  return COUNTRY_CODE_BY_NORMALIZED_NAME.get(normalize(value));
+};
+
+const projectClientCountryCode = (project: NormalizedProject): string | undefined =>
+  normalizeCountryCode(project.clientCountryCode) ??
+  (project.clientCountry === undefined
+    ? undefined
+    : COUNTRY_CODE_BY_NORMALIZED_NAME.get(normalize(project.clientCountry)));
 
 const isDefinedNumber = (value: number | null | undefined): value is number =>
   typeof value === 'number' && Number.isFinite(value);
@@ -192,10 +209,10 @@ export function projectSkipReason(
   }
 
   const profileCountries = profile.countries
-    .map(normalizeCountryCode)
+    .map(normalizeCountryFilterValue)
     .filter((code): code is string => code !== undefined);
   if (profileCountries.length > 0) {
-    const clientCountryCode = normalizeCountryCode(project.clientCountryCode);
+    const clientCountryCode = projectClientCountryCode(project);
     if (clientCountryCode === undefined || !profileCountries.includes(clientCountryCode))
       return 'countryMismatch';
   }

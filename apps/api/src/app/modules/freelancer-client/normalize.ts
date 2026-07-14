@@ -24,6 +24,14 @@ export const normalizeOptionalText = (value: string | undefined): string | undef
 const ownerCountry = (owner: FreelancerUser | undefined) =>
   owner?.location?.country ?? owner?.country;
 
+type FreelancerCountry = { name?: string; code?: string } | string | undefined;
+
+const countryName = (country: FreelancerCountry) =>
+  typeof country === 'string' ? country : country?.name;
+
+const countryCode = (country: FreelancerCountry) =>
+  typeof country === 'string' ? undefined : country?.code;
+
 export function normalizeFreelancerProject(
   project: FreelancerProject,
   owner?: FreelancerUser,
@@ -93,9 +101,10 @@ export function normalizeFreelancerProject(
   }
 
   const country = project.location?.country ?? ownerCountry(owner);
-  if (country?.name !== undefined) normalized.clientCountry = country.name;
+  const clientCountry = countryName(country);
+  if (clientCountry !== undefined) normalized.clientCountry = clientCountry;
 
-  const clientCountryCode = normalizeCountryCode(country?.code);
+  const clientCountryCode = normalizeCountryCode(countryCode(country));
   if (clientCountryCode !== undefined) normalized.clientCountryCode = clientCountryCode;
 
   const ownerId = project.owner_id ?? project.owner?.id;
