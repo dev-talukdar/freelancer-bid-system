@@ -42,7 +42,7 @@ export interface FreelancerProject {
   bid_stats?: { bid_count?: number; bid_avg?: number };
   jobs?: FreelancerJob[];
   upgrades?: Record<string, unknown>;
-  location?: { country?: { name?: string; code?: string } };
+  location?: { country?: { name?: string; code?: string } | string };
   owner_id?: number;
   owner?: { id?: number; username?: string };
 }
@@ -50,8 +50,8 @@ export interface FreelancerProject {
 export interface FreelancerUser {
   id?: number;
   username?: string;
-  location?: { country?: { name?: string; code?: string } };
-  country?: { name?: string; code?: string };
+  location?: { country?: { name?: string; code?: string } | string };
+  country?: { name?: string; code?: string } | string;
 }
 
 export interface FreelancerActiveProjectsResult {

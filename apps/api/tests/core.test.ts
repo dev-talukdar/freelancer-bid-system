@@ -334,6 +334,15 @@ describe('freelancer project normalization and matching', () => {
     );
   });
 
+  it('matches owner country names when the API omits the country code', () => {
+    const project: NormalizedProject = { ...realisticProject, clientCountry: ' United States ' };
+    delete project.clientCountryCode;
+    expect(projectMatches(activeProfile, project)).toBe(true);
+    expect(
+      projectSkipReason({ ...activeProfile, countries: ['United States'] }, project),
+    ).toBeUndefined();
+  });
+
   it('filters projects by authoritative allowed currencies without using profile currency choices', () => {
     expect(projectMatches({ ...activeProfile, currencies: ['EUR'] }, realisticProject)).toBe(true);
     expect(
@@ -748,6 +757,44 @@ describe('freelancer client pagination', () => {
 
     expect(projects[0]?.clientCountryCode).toBe('GB');
     expect(projects[0]?.currency?.code).toBe('GBP');
+    expect(projectMatches(activeProfile, projects[0]!)).toBe(true);
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps string country names from Freelancer owner details for local filtering', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      json: () =>
+        Promise.resolve({
+          result: {
+            projects: [
+              {
+                id: 43,
+                title: 'US web development project',
+                type: 'fixed',
+                status: 'active',
+                language: 'en',
+                owner_id: 8,
+                time_submitted: Math.floor(Date.now() / 1000),
+                currency: { code: 'usd', country: 'US' },
+                jobs: [{ id: 759, name: 'React.js' }],
+              },
+            ],
+            users: { '8': { id: 8, location: { country: 'United States' } } },
+          },
+        }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new FreelancerClient('token', 'https://www.freelancer.com/api');
+
+    const projects = await client.activeProjects({
+      limit: 10,
+      user_details: true,
+      user_country_details: true,
+    });
+
+    expect(projects[0]?.clientCountry).toBe('United States');
     expect(projectMatches(activeProfile, projects[0]!)).toBe(true);
     vi.unstubAllGlobals();
   });
