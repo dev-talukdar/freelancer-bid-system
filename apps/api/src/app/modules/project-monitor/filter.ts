@@ -1,6 +1,13 @@
+import { DEFAULT_MAXIMUM_PROJECT_AGE_MINUTES } from '@fbs/shared';
 import type { SearchProfileDocument } from '../search-profile/model.js';
 import type { NormalizedProject } from '../freelancer-client/types.js';
 import { logger } from '../../config/logger.js';
+import {
+  ALLOWED_COUNTRIES,
+  ALLOWED_CURRENCY_CODES,
+  normalizeCountryCode,
+  normalizeCurrencyCode,
+} from '../freelancer-client/allowlists.js';
 
 export type SkipReason =
   | 'invalidShape'
@@ -11,6 +18,7 @@ export type SkipReason =
   | 'keywordMismatch'
   | 'excludedKeyword'
   | 'jobMismatch'
+  | 'countryUnavailable'
   | 'countryMismatch'
   | 'languageMismatch'
   | 'currencyMismatch'
@@ -37,6 +45,7 @@ export const createSkipReasons = (): Record<SkipReason, number> => ({
   fixedBudgetMismatch: 0,
   hourlyRateMismatch: 0,
   duplicate: 0,
+  countryUnavailable: 0,
 });
 
 export type ProjectFilterProfile = Pick<
@@ -70,38 +79,39 @@ const compact = (value: string): string => value.replace(/\s+/g, '');
 const includesNormalized = (source: string, normalizedNeedle: string): boolean =>
   source.includes(normalizedNeedle) || compact(source).includes(compact(normalizedNeedle));
 
-const COUNTRY_ALIAS_GROUPS = [
-  ['tw', 'taiwan'],
-  ['hk', 'hong kong'],
-  ['nz', 'new zealand'],
-  ['il', 'israel'],
-  ['sa', 'saudi arabia'],
-  ['nl', 'netherlands', 'the netherlands', 'holland'],
-  ['gr', 'greece'],
-  ['es', 'spain'],
-  ['it', 'italy'],
-  ['ie', 'ireland'],
-  ['sg', 'singapore'],
-  ['pt', 'portugal'],
-  ['se', 'sweden'],
-  ['ch', 'switzerland'],
-  ['pl', 'poland'],
-  ['be', 'belgium'],
-  ['fr', 'france'],
-  ['de', 'germany'],
-  ['gb', 'united kingdom', 'uk', 'u k', 'great britain', 'england'],
-  ['au', 'australia'],
-  ['ca', 'canada'],
-  ['us', 'united states', 'united states of america', 'usa', 'u s a', 'america'],
-] as const;
+const COUNTRY_CODE_BY_NORMALIZED_NAME = new Map(
+  ALLOWED_COUNTRIES.map((country) => [normalize(country.name), country.code]),
+);
 
-const countryTokens = (value: string | undefined): string[] => {
-  if (value === undefined) return [];
-  const token = normalized(value);
-  const aliasGroup = COUNTRY_ALIAS_GROUPS.find((group) =>
-    (group as readonly string[]).includes(token),
+const COUNTRY_CODE_ALIASES = new Map([['UK', 'GB']]);
+
+const normalizeAllowedCountryCode = (value: string | undefined): string | undefined => {
+  const normalizedCode = normalizeCountryCode(value);
+  if (normalizedCode === undefined) return undefined;
+  return COUNTRY_CODE_ALIASES.get(normalizedCode) ?? normalizedCode;
+};
+
+const normalizeCountryFilterValue = (value: string): string | undefined => {
+  const normalizedCode = normalizeAllowedCountryCode(value);
+  if (
+    normalizedCode !== undefined &&
+    ALLOWED_COUNTRIES.some((country) => country.code === normalizedCode)
+  ) {
+    return normalizedCode;
+  }
+  return COUNTRY_CODE_BY_NORMALIZED_NAME.get(normalize(value));
+};
+
+const projectClientCountryCode = (project: NormalizedProject): string | undefined => {
+  const normalizedClientCountryCode = normalizeAllowedCountryCode(project.clientCountryCode);
+  if (normalizedClientCountryCode !== undefined) return normalizedClientCountryCode;
+
+  if (project.clientCountry === undefined) return undefined;
+
+  return (
+    normalizeCountryFilterValue(project.clientCountry) ??
+    COUNTRY_CODE_BY_NORMALIZED_NAME.get(normalize(project.clientCountry))
   );
-  return aliasGroup === undefined ? [token] : [...aliasGroup];
 };
 
 const isDefinedNumber = (value: number | null | undefined): value is number =>
@@ -159,7 +169,7 @@ export function projectSkipReason(
 
   if (project.deleted === true) return 'deleted';
   if (!isProjectOpen(project)) return 'notOpen';
-  const maximumAgeMinutes = profile.maximumProjectAgeMinutes ?? 10;
+  const maximumAgeMinutes = profile.maximumProjectAgeMinutes ?? DEFAULT_MAXIMUM_PROJECT_AGE_MINUTES;
   const maximumAgeMs = maximumAgeMinutes * 60 * 1000;
   if (Date.now() - activityAt.getTime() > maximumAgeMs) return 'tooOld';
   if (project.local === true && !profile.allowLocalProjects) return 'localProject';
@@ -219,20 +229,33 @@ export function projectSkipReason(
     return 'jobMismatch';
   }
 
-  const profileCountries = profile.countries.flatMap(countryTokens);
-  const clientCountries = [project.clientCountryCode, project.clientCountry].flatMap(countryTokens);
+  const profileCountries = profile.countries
+    .map(normalizeCountryFilterValue)
+    .filter((code): code is string => code !== undefined);
+  if (profileCountries.length > 0) {
+    const clientCountryCode = projectClientCountryCode(project);
 
-  const matchesCountry =
-    profileCountries.length === 0 ||
-    clientCountries.some((clientCountry) => profileCountries.includes(clientCountry));
-  if (!matchesCountry) return 'countryMismatch';
+    // The same country codes are already sent to Freelancer through
+    // countries[]. Some active-project responses omit owner-country
+    // projections even when user_country_details=true.
+    //
+    // When country data is available, verify it locally.
+    // When it is unavailable, rely on Freelancer's upstream filter
+    // instead of rejecting every returned project.
+    if (clientCountryCode !== undefined && !profileCountries.includes(clientCountryCode)) {
+      return 'countryMismatch';
+    }
+  }
 
-  const profileCurrencies = profile.currencies.map(normalized);
-  const projectCurrency = project.currency?.code;
-  const matchesCurrency =
-    profileCurrencies.length === 0 ||
-    (projectCurrency !== undefined && profileCurrencies.includes(normalized(projectCurrency)));
-  if (!matchesCurrency) return 'currencyMismatch';
+  const projectCurrencyCode = normalizeCurrencyCode(project.currency?.code);
+  if (projectCurrencyCode === undefined || !ALLOWED_CURRENCY_CODES.has(projectCurrencyCode))
+    return 'currencyMismatch';
+
+  const profileCurrencies = profile.currencies
+    .map(normalizeCurrencyCode)
+    .filter((code): code is string => code !== undefined);
+  if (profileCurrencies.length > 0 && !profileCurrencies.includes(projectCurrencyCode))
+    return 'currencyMismatch';
 
   const profileLanguages = profile.languages.map(normalized);
   const matchesLanguage =

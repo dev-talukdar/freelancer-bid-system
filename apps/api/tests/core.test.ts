@@ -31,10 +31,9 @@ import { realisticFreelancerActiveProjectResponse } from './fixtures/freelancer-
 import { FreelancerClient } from '../src/app/modules/freelancer-client/client.js';
 import type { NormalizedProject } from '../src/app/modules/freelancer-client/types.js';
 import {
-  TARGET_COUNTRY_CODES,
   TARGET_SKILL_IDS,
   buildSearchProfileCreatePayload,
-  clearLegacyDefaultCountryFilters,
+  defaultCountryCodes,
   seedSearchProfile,
   syncActiveProfileTargetSkillIds,
 } from '../src/app/modules/search-profile/service.js';
@@ -51,7 +50,7 @@ const activeProfile: ProjectFilterProfile = {
   keywords: ['react'],
   excludedKeywords: [],
   jobIds: [],
-  countries: [],
+  countries: defaultCountryCodes(),
   currencies: [],
   languages: ['en'],
   projectTypes: ['fixed', 'hourly'],
@@ -90,6 +89,7 @@ const normalizedRealisticProject = normalizeFreelancerProject(
 const realisticProject = {
   ...normalizedRealisticProject,
   timeSubmitted: Math.floor(Date.now() / 1000),
+  clientCountryCode: 'US',
 };
 
 const objectIdProfile = { ...activeProfile, _id: new Types.ObjectId() } as SearchProfileDocument;
@@ -134,6 +134,12 @@ describe('api foundations', () => {
     expect(monitorQs.get('max_price')).toBe('1000');
     expect(monitorQs.get('min_hourly_rate')).toBe('25');
     expect(monitorQs.get('max_hourly_rate')).toBe('150');
+
+    const checkpointParams = buildMonitorSearchParams(
+      { ...objectIdProfile, maximumProjectAgeMinutes: 720 },
+      Math.floor(Date.now() / 1000) - 5 * 60,
+    );
+    expect(checkpointParams.from_time).toBe(Math.floor(Date.now() / 1000) - 720 * 60);
     vi.useRealTimers();
   });
 
@@ -223,11 +229,11 @@ describe('freelancer project normalization and matching', () => {
     expect(normalizeFreelancerProject({ id: 2, title: 'Bad', type: 'contest' })).toBeUndefined();
   });
 
-  it('allows empty jobIds and countries, including missing country', () => {
+  it('requires owner country from the authoritative allowlist', () => {
     const project: NormalizedProject = { ...realisticProject, jobs: [] };
     delete project.clientCountry;
     delete project.clientCountryCode;
-    expect(projectMatches(activeProfile, project)).toBe(true);
+    expect(projectSkipReason(activeProfile, project)).toBe('countryMismatch');
   });
 
   it('matches one keyword case-insensitively', () => {
@@ -310,29 +316,77 @@ describe('freelancer project normalization and matching', () => {
       status: 'active',
       timeSubmitted: Math.floor(Date.now() / 1000),
       jobs: [],
+      currency: { code: 'USD' },
+      clientCountryCode: 'US',
     };
     expect(projectMatches({ ...activeProfile, languages: [] }, minimal)).toBe(true);
   });
 
-  it('matches configured country names and aliases against country codes', () => {
-    const profile = { ...activeProfile, countries: ['USA', 'Taiwan', 'Poland'] };
-    expect(projectMatches(profile, { ...realisticProject, clientCountryCode: 'us' })).toBe(true);
-    expect(projectMatches(profile, { ...realisticProject, clientCountryCode: 'tw' })).toBe(true);
-    expect(projectMatches(profile, { ...realisticProject, clientCountry: 'Poland' })).toBe(true);
-    expect(
-      projectMatches(profile, {
-        ...realisticProject,
-        clientCountryCode: undefined,
-        clientCountry: 'United States',
-      }),
-    ).toBe(true);
+  it('matches normalized API owner country codes against the authoritative allowlist', () => {
+    expect(projectMatches(activeProfile, { ...realisticProject, clientCountryCode: ' us ' })).toBe(
+      true,
+    );
+    expect(projectMatches(activeProfile, { ...realisticProject, clientCountryCode: 'TW' })).toBe(
+      true,
+    );
+    expect(projectSkipReason(activeProfile, { ...realisticProject, clientCountryCode: 'IN' })).toBe(
+      'countryMismatch',
+    );
   });
 
-  it('filters projects by allowed currencies', () => {
+  it('matches owner country names when the API omits the country code', () => {
+    const project: NormalizedProject = { ...realisticProject, clientCountry: ' United States ' };
+    delete project.clientCountryCode;
+    expect(projectMatches(activeProfile, project)).toBe(true);
+    expect(
+      projectSkipReason({ ...activeProfile, countries: ['United States'] }, project),
+    ).toBeUndefined();
+  });
+
+  it('filters projects by configured currency choices after validating the authoritative allowlist', () => {
     expect(projectMatches({ ...activeProfile, currencies: ['USD'] }, realisticProject)).toBe(true);
     expect(projectSkipReason({ ...activeProfile, currencies: ['EUR'] }, realisticProject)).toBe(
       'currencyMismatch',
     );
+    expect(
+      projectSkipReason(activeProfile, { ...realisticProject, currency: { code: 'INR' } }),
+    ).toBe('currencyMismatch');
+  });
+
+  it('accepts common UK country-code aliases for employer country matching', () => {
+    expect(projectMatches(activeProfile, { ...realisticProject, clientCountryCode: 'UK' })).toBe(
+      true,
+    );
+    expect(
+      projectMatches(
+        { ...activeProfile, countries: ['UK'] },
+        { ...realisticProject, clientCountryCode: 'GB' },
+      ),
+    ).toBe(true);
+    expect(
+      projectMatches(activeProfile, {
+        ...realisticProject,
+        clientCountry: 'uk',
+        clientCountryCode: undefined,
+      }),
+    ).toBe(true);
+  });
+
+  it('does not confuse GBP currency metadata country UK with employer country GB', () => {
+    expect(
+      projectMatches(activeProfile, {
+        ...realisticProject,
+        currency: { id: 4, code: 'GBP', country: 'UK' },
+        clientCountryCode: 'GB',
+      }),
+    ).toBe(true);
+    expect(
+      projectMatches(activeProfile, {
+        ...realisticProject,
+        currency: { id: 4, code: 'GBP', country: 'UK' },
+        clientCountryCode: 'UK',
+      }),
+    ).toBe(true);
   });
 
   it('handles nullable numeric filters and reports accurate reasons', () => {
@@ -530,8 +584,8 @@ describe('freelancer project normalization and matching', () => {
   it('continues applying filters after relevance matching', () => {
     expect(
       projectSkipReason(
-        { ...activeProfile, keywords: [], jobIds: [500], currencies: ['EUR'] },
-        { ...realisticProject, jobs: [{ id: 500, name: 'Node.js' }] },
+        { ...activeProfile, keywords: [], jobIds: [500] },
+        { ...realisticProject, jobs: [{ id: 500, name: 'Node.js' }], currency: { code: 'INR' } },
       ),
     ).toBe('currencyMismatch');
   });
@@ -542,6 +596,38 @@ describe('freelancer project normalization and matching', () => {
 });
 
 describe('mongoose payload builders', () => {
+  it('keeps seeded monitor filters aligned with the Freelancer search URL selections', () => {
+    expect([...TARGET_SKILL_IDS]).toEqual([
+      9, 335, 500, 759, 1031, 1088, 1092, 1093, 1827, 2376, 2382, 2695, 2839,
+    ]);
+    expect(defaultCountryCodes()).toEqual(
+      expect.arrayContaining([
+        'TW',
+        'HK',
+        'NZ',
+        'IL',
+        'SA',
+        'NL',
+        'GR',
+        'ES',
+        'IT',
+        'IE',
+        'SG',
+        'PT',
+        'SE',
+        'CH',
+        'PL',
+        'BE',
+        'FR',
+        'DE',
+        'GB',
+        'AU',
+        'CA',
+        'US',
+      ]),
+    );
+  });
+
   it('seeds configured target skill IDs into new profiles', () => {
     const payload = buildSearchProfileCreatePayload({
       name: 'Target skills',
@@ -562,35 +648,34 @@ describe('mongoose payload builders', () => {
     updateOne.mockRestore();
   });
 
-  it('does not run profile sync when profiles already exist', async () => {
+  it('backfills existing profiles with default monitoring filters without creating a profile', async () => {
     const exists = vi
       .spyOn(SearchProfileModel, 'exists')
       .mockResolvedValue({ _id: new Types.ObjectId() } as never);
+    const updateMany = vi.spyOn(SearchProfileModel, 'updateMany').mockResolvedValue({} as never);
     const create = vi.spyOn(SearchProfileModel, 'create');
 
     await seedSearchProfile();
 
     expect(create).not.toHaveBeenCalled();
+    expect(updateMany).toHaveBeenCalledWith(
+      {},
+      {
+        $set: expect.objectContaining({
+          countries: defaultCountryCodes(),
+          currencies: [],
+          languages: ['en'],
+          minimumFixedBudget: 50,
+          maximumFixedBudget: 50000,
+          minimumHourlyRate: 20,
+          maximumHourlyRate: 100,
+          maximumBidCount: 200,
+        }),
+      },
+    );
     exists.mockRestore();
+    updateMany.mockRestore();
     create.mockRestore();
-  });
-
-  it('clears legacy broad default country filters that block most notifications', async () => {
-    const save = vi.fn();
-    const legacyProfile = { countries: [...TARGET_COUNTRY_CODES], save };
-    const sort = vi.fn().mockResolvedValue({ countries: ['US', 'ca', 'gb', 'au'], save });
-    const findOne = vi.spyOn(SearchProfileModel, 'findOne').mockReturnValue({ sort } as never);
-
-    await expect(clearLegacyDefaultCountryFilters()).resolves.toBe(false);
-    expect(save).not.toHaveBeenCalled();
-
-    sort.mockResolvedValue(legacyProfile);
-
-    await expect(clearLegacyDefaultCountryFilters()).resolves.toBe(true);
-    expect(legacyProfile.countries).toEqual([]);
-    expect(save).toHaveBeenCalledTimes(1);
-
-    findOne.mockRestore();
   });
 
   it('seeds broad default profile filters for realistic notifications', () => {
@@ -600,14 +685,15 @@ describe('mongoose payload builders', () => {
       keywords: [],
       excludedKeywords: [],
       jobIds: [...TARGET_SKILL_IDS],
-      countries: [],
+      countries: defaultCountryCodes(),
       currencies: [],
-      languages: [],
+      languages: ['en'],
       projectTypes: ['fixed', 'hourly'],
-      minimumFixedBudget: null,
-      maximumFixedBudget: null,
-      minimumHourlyRate: null,
-      maximumHourlyRate: null,
+      minimumFixedBudget: 50,
+      maximumFixedBudget: 50000,
+      minimumHourlyRate: 20,
+      maximumHourlyRate: 100,
+      maximumBidCount: 200,
       pollIntervalSeconds: 30,
       maximumProjectAgeMinutes: 720,
       notificationEnabled: true,
@@ -617,8 +703,7 @@ describe('mongoose payload builders', () => {
     expect(
       projectMatches(payload, {
         ...realisticProject,
-        language: undefined,
-        clientCountryCode: undefined,
+        language: 'en',
       }),
     ).toBe(true);
   });
@@ -689,7 +774,86 @@ describe('freelancer client pagination', () => {
     vi.unstubAllGlobals();
   });
 
-  it('uses a maximum of three active-project pages', async () => {
+  it('maps owner country from the Freelancer result users object', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      json: () =>
+        Promise.resolve({
+          result: {
+            projects: [
+              {
+                id: 42,
+                title: 'Owner country project',
+                type: 'fixed',
+                status: 'active',
+                language: 'en',
+                owner_id: 7,
+                time_submitted: Math.floor(Date.now() / 1000),
+                currency: { code: 'gbp', country: 'UK' },
+                jobs: [{ id: 759, name: 'React.js' }],
+              },
+            ],
+            users: {
+              '7': { id: 7, location: { country: { code: ' gb ', name: 'United Kingdom' } } },
+            },
+          },
+        }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new FreelancerClient('token', 'https://www.freelancer.com/api');
+
+    const projects = await client.activeProjects({
+      limit: 10,
+      user_details: true,
+      user_country_details: true,
+    });
+
+    expect(projects[0]?.clientCountryCode).toBe('GB');
+    expect(projects[0]?.currency?.code).toBe('GBP');
+    expect(projectMatches(activeProfile, projects[0]!)).toBe(true);
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps string country names from Freelancer owner details for local filtering', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      json: () =>
+        Promise.resolve({
+          result: {
+            projects: [
+              {
+                id: 43,
+                title: 'US web development project',
+                type: 'fixed',
+                status: 'active',
+                language: 'en',
+                owner_id: 8,
+                time_submitted: Math.floor(Date.now() / 1000),
+                currency: { code: 'usd', country: 'US' },
+                jobs: [{ id: 759, name: 'React.js' }],
+              },
+            ],
+            users: { '8': { id: 8, location: { country: 'United States' } } },
+          },
+        }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new FreelancerClient('token', 'https://www.freelancer.com/api');
+
+    const projects = await client.activeProjects({
+      limit: 10,
+      user_details: true,
+      user_country_details: true,
+    });
+
+    expect(projects[0]?.clientCountry).toBe('United States');
+    expect(projectMatches(activeProfile, projects[0]!)).toBe(true);
+    vi.unstubAllGlobals();
+  });
+
+  it('uses a defensive maximum of one hundred active-project pages', async () => {
     const page = (offset: number) => ({
       ok: true,
       headers: new Headers(),
@@ -709,18 +873,17 @@ describe('freelancer client pagination', () => {
           },
         }),
     });
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(page(0))
-      .mockResolvedValueOnce(page(1))
-      .mockResolvedValueOnce(page(2));
+    const fetchMock = vi.fn((url: string) => {
+      const offset = Number(new URL(url).searchParams.get('offset') ?? '0');
+      return Promise.resolve(page(offset));
+    });
     vi.stubGlobal('fetch', fetchMock);
     const client = new FreelancerClient('token', 'https://www.freelancer.com/api');
 
     const projects = await client.activeProjects({ limit: 1 });
 
-    expect(projects).toHaveLength(3);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(projects).toHaveLength(100);
+    expect(fetchMock).toHaveBeenCalledTimes(100);
     vi.unstubAllGlobals();
   });
 });

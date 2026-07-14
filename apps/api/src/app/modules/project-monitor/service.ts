@@ -1,4 +1,8 @@
-import { DEFAULT_POLL_INTERVAL_SECONDS, type ProjectType } from '@fbs/shared';
+import {
+  DEFAULT_MAXIMUM_PROJECT_AGE_MINUTES,
+  DEFAULT_POLL_INTERVAL_SECONDS,
+  type ProjectType,
+} from '@fbs/shared';
 import type { Types } from 'mongoose';
 import { logger } from '../../config/logger.js';
 import { env } from '../../config/env.js';
@@ -6,6 +10,7 @@ import { FreelancerClient } from '../freelancer-client/client.js';
 import { DetectedProjectModel } from '../detected-project/model.js';
 import { createSkipReasons, projectActivityDate, projectSkipReason } from './filter.js';
 import { PollLock } from './lock.js';
+import { ProjectMonitorCheckpointModel } from './checkpoint-model.js';
 
 import type { NormalizedProject, ProjectSearchParams } from '../freelancer-client/types.js';
 import type { SearchProfileDocument } from '../search-profile/model.js';
@@ -40,15 +45,25 @@ const projectIsoDate = (timestamp: number | undefined): string | undefined =>
 
 const normalizedProjectSummary = (profile: SearchProfileDocument, project: NormalizedProject) => ({
   id: project.id,
+  ownerId: project.ownerId,
+
   title: project.title,
   status: project.status,
   frontendProjectStatus: project.frontendProjectStatus,
   deleted: project.deleted,
+
   submittedAt: projectIsoDate(project.timeSubmitted),
   updatedAt: projectIsoDate(project.timeUpdated),
   activityAgeMinutes: projectAgeMinutes(project),
+
+  clientCountryCode: project.clientCountryCode,
+  clientCountry: project.clientCountry,
+
+  currencyCode: project.currency?.code,
+
   skillIds: project.jobs.map((job) => job.id),
   skillNames: project.jobs.map((job) => job.name),
+
   skipReason: projectSkipReason(profile, project),
 });
 
@@ -122,16 +137,24 @@ export function buildDetectedProjectCreatePayload(
   return payload;
 }
 
+const CHECKPOINT_KEY = 'freelancer-project-monitor';
+const OVERLAP_SECONDS = 5 * 60;
 const unixSecondsNow = () => Math.floor(Date.now() / 1000);
 
 const hasFiniteNumber = (value: number | null | undefined): value is number =>
   typeof value === 'number' && Number.isFinite(value);
 
-export function buildMonitorSearchParams(profile: SearchProfileDocument): ProjectSearchParams {
-  const maximumProjectAgeMinutes = profile.maximumProjectAgeMinutes ?? 10;
-  const fromTime = unixSecondsNow() - maximumProjectAgeMinutes * 60;
+export function buildMonitorSearchParams(
+  profile: SearchProfileDocument,
+  checkpointFromTime?: number,
+): ProjectSearchParams {
+  const maximumProjectAgeMinutes =
+    profile.maximumProjectAgeMinutes ?? DEFAULT_MAXIMUM_PROJECT_AGE_MINUTES;
+  const profileFromTime = unixSecondsNow() - maximumProjectAgeMinutes * 60;
+  const fromTime = Math.min(checkpointFromTime ?? profileFromTime, profileFromTime);
 
   const params: ProjectSearchParams = {
+    location_details: true,
     from_time: fromTime,
     sort_field: 'time_updated',
     reverse_sort: false,
@@ -226,8 +249,8 @@ export class ProjectMonitor {
             enabled: profile.enabled,
             maximumProjectAgeMinutes: profile.maximumProjectAgeMinutes,
             jobIds: profile.jobIds,
-            countries: profile.countries,
-            currencies: profile.currencies,
+            allowedCountryFilter: 'authoritative allowlist',
+            allowedCurrencyFilter: 'authoritative allowlist',
             languages: profile.languages,
             projectTypes: profile.projectTypes,
             maximumBidCount: profile.maximumBidCount,
@@ -242,7 +265,15 @@ export class ProjectMonitor {
         // the local matcher as the source of truth for currencies, budgets, excluded keywords, local
         // projects, bid counts, and any response-shape differences. Freelancer documents
         // reverse_sort=true as ascending order, so keep it false for latest-first results.
-        const searchParams = buildMonitorSearchParams(profile);
+        const checkpoint = await ProjectMonitorCheckpointModel.findOne({
+          key: CHECKPOINT_KEY,
+        }).lean();
+        const savedFromTime = checkpoint?.lastSuccessfulFromTime;
+        const checkpointFromTime =
+          typeof savedFromTime === 'number'
+            ? Math.max(0, savedFromTime - OVERLAP_SECONDS)
+            : undefined;
+        const searchParams = buildMonitorSearchParams(profile, checkpointFromTime);
         const projects = await this.client.activeProjects(searchParams);
 
         logProjectFetchDiagnostics(profile, projects);
@@ -254,6 +285,24 @@ export class ProjectMonitor {
             skipReasons.invalidShape++;
             continue;
           }
+
+          const countryUnavailable =
+            profile.countries.length > 0 &&
+            project.clientCountryCode === undefined &&
+            project.clientCountry === undefined;
+
+          if (countryUnavailable) {
+            logger.debug(
+              {
+                projectId: project.id,
+                ownerId: project.ownerId,
+                configuredCountries: profile.countries,
+                verificationSource: 'freelancer-countries-query-filter',
+              },
+              'project country unavailable locally; relying on Freelancer upstream country filter',
+            );
+          }
+
           const reason = projectSkipReason(profile, project);
           if (reason) {
             skipReasons[reason]++;
@@ -272,10 +321,12 @@ export class ProjectMonitor {
                 projectSkillIds: project.jobs.map((job) => job.id),
                 projectSkillNames: project.jobs.map((job) => job.name),
                 configuredSkillIds: profile.jobIds,
-                country: project.clientCountryCode ?? project.clientCountry,
-                configuredCountries: profile.countries,
+                ownerId: project.ownerId,
+                clientCountryCode: project.clientCountryCode,
+                clientCountry: project.clientCountry,
+                countryFilter: 'authoritative allowlist',
                 currency: project.currency?.code,
-                configuredCurrencies: profile.currencies,
+                currencyFilter: 'authoritative allowlist',
                 language: project.language,
                 configuredLanguages: profile.languages,
                 projectType: project.type,
@@ -306,6 +357,22 @@ export class ProjectMonitor {
             $lt: new Date(Date.now() - env.DETECTED_PROJECT_RETENTION_DAYS * 86400_000),
           },
         });
+        const newestActivity = projects.reduce<Date | undefined>((latest, project) => {
+          if (!project) return latest;
+          const activityAt = projectActivityDate(project);
+          if (activityAt === undefined) return latest;
+          return latest === undefined || activityAt > latest ? activityAt : latest;
+        }, undefined);
+        await ProjectMonitorCheckpointModel.findOneAndUpdate(
+          { key: CHECKPOINT_KEY },
+          {
+            $set: {
+              lastSuccessfulFromTime: unixSecondsNow(),
+              ...(newestActivity === undefined ? {} : { lastSeenProjectActivity: newestActivity }),
+            },
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true },
+        );
         this.state.lastSuccessfulPoll = new Date();
         this.state.lastPollingError = undefined;
         const skipped = Object.values(skipReasons).reduce((total, count) => total + count, 0);

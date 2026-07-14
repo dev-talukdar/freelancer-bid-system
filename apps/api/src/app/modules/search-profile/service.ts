@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/require-await */
 import { searchProfileSchema, type SearchProfileInput } from '@fbs/shared';
 
+import { ALLOWED_COUNTRIES } from '../freelancer-client/allowlists.js';
 import { SearchProfileModel } from './model.js';
 
 interface SearchProfileCreatePayload {
@@ -31,61 +32,29 @@ export const TARGET_SKILL_IDS = [
   9, // JavaScript
   335, // HTML
   500, // Node.js
-  1088, // Full Stack Development
-  1827, // Website Build
-  2839, // Website Development
-  1031, // Web Development
   759, // React.js
+  1031, // Web Development
+  1088, // Full Stack Development
   1092, // Backend Development
   1093, // Frontend Development
+  1827, // Website Build
   2376, // Next.js
   2382, // Web Application
-  979, // TypeScript
-] as const;
-
-export const TARGET_COUNTRY_CODES = [
-  'tw',
-  'hk',
-  'nz',
-  'il',
-  'sa',
-  'nl',
-  'gr',
-  'es',
-  'it',
-  'ie',
-  'sg',
-  'pt',
-  'se',
-  'ch',
-  'pl',
-  'be',
-  'fr',
-  'de',
-  'gb',
-  'au',
-  'ca',
-  'us',
+  2695, // SaaS
+  2839, // Website Development
 ] as const;
 
 const targetSkillIds = (): number[] => [...TARGET_SKILL_IDS];
-const sameStringSet = (left: string[], right: readonly string[]): boolean => {
-  const normalizedLeft = new Set(left.map((value) => value.trim().toLowerCase()));
-  const normalizedRight = new Set(right.map((value) => value.trim().toLowerCase()));
-  if (normalizedLeft.size !== normalizedRight.size) return false;
-  return [...normalizedLeft].every((value) => normalizedRight.has(value));
-};
-
+export const DEFAULT_PROFILE_FILTERS = {
+  languages: ['en'],
+  minimumFixedBudget: 50,
+  maximumFixedBudget: 50000,
+  minimumHourlyRate: 20,
+  maximumHourlyRate: 100,
+  maximumBidCount: 200,
+} as const;
+export const defaultCountryCodes = (): string[] => ALLOWED_COUNTRIES.map((country) => country.code);
 export const syncActiveProfileTargetSkillIds = async (): Promise<boolean> => false;
-export const clearLegacyDefaultCountryFilters = async (): Promise<boolean> => {
-  const profile = await SearchProfileModel.findOne({ enabled: true }).sort({ updatedAt: -1 });
-  if (!profile || !sameStringSet(profile.countries, TARGET_COUNTRY_CODES)) return false;
-
-  profile.countries = [];
-  await profile.save();
-  return true;
-};
-
 export const buildSearchProfileCreatePayload = (input: unknown): SearchProfileCreatePayload => {
   const parsed = searchProfileSchema.parse(input);
 
@@ -204,7 +173,19 @@ export const buildSearchProfileUpdatePayload = (input: unknown): SearchProfileUp
 export const seedSearchProfile = async (): Promise<void> => {
   const existingProfile = await SearchProfileModel.exists({});
 
-  if (existingProfile) return;
+  if (existingProfile) {
+    await SearchProfileModel.updateMany(
+      {},
+      {
+        $set: {
+          ...DEFAULT_PROFILE_FILTERS,
+          countries: defaultCountryCodes(),
+          currencies: [],
+        },
+      },
+    );
+    return;
+  }
 
   await SearchProfileModel.create(
     buildSearchProfileCreatePayload({
@@ -214,14 +195,15 @@ export const seedSearchProfile = async (): Promise<void> => {
       keywords: [],
       excludedKeywords: [],
       jobIds: targetSkillIds(),
-      countries: [],
+      countries: defaultCountryCodes(),
       currencies: [],
-      languages: [],
+      languages: [...DEFAULT_PROFILE_FILTERS.languages],
       projectTypes: ['fixed', 'hourly'],
-      minimumFixedBudget: null,
-      maximumFixedBudget: null,
-      minimumHourlyRate: null,
-      maximumHourlyRate: null,
+      minimumFixedBudget: DEFAULT_PROFILE_FILTERS.minimumFixedBudget,
+      maximumFixedBudget: DEFAULT_PROFILE_FILTERS.maximumFixedBudget,
+      minimumHourlyRate: DEFAULT_PROFILE_FILTERS.minimumHourlyRate,
+      maximumHourlyRate: DEFAULT_PROFILE_FILTERS.maximumHourlyRate,
+      maximumBidCount: DEFAULT_PROFILE_FILTERS.maximumBidCount,
       pollIntervalSeconds: 30,
       maximumProjectAgeMinutes: 720,
       notificationEnabled: true,
