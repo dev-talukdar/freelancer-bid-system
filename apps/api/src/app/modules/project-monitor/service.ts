@@ -141,7 +141,11 @@ export function buildMonitorSearchParams(
   const maximumProjectAgeMinutes =
     profile.maximumProjectAgeMinutes ?? DEFAULT_MAXIMUM_PROJECT_AGE_MINUTES;
   const profileFromTime = unixSecondsNow() - maximumProjectAgeMinutes * 60;
-  const fromTime = checkpointFromTime ?? profileFromTime;
+  // Always keep the full configured recency window in the Freelancer query.
+  // The checkpoint is used only as an overlap optimization; using it as the only
+  // lower bound can hide projects that are still within maximumProjectAgeMinutes
+  // (for example, projects posted up to 12 hours ago when polling every 30s).
+  const fromTime = Math.min(checkpointFromTime ?? profileFromTime, profileFromTime);
 
   const params: ProjectSearchParams = {
     from_time: fromTime,

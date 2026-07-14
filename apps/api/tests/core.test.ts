@@ -134,6 +134,12 @@ describe('api foundations', () => {
     expect(monitorQs.get('max_price')).toBe('1000');
     expect(monitorQs.get('min_hourly_rate')).toBe('25');
     expect(monitorQs.get('max_hourly_rate')).toBe('150');
+
+    const checkpointParams = buildMonitorSearchParams(
+      { ...objectIdProfile, maximumProjectAgeMinutes: 720 },
+      Math.floor(Date.now() / 1000) - 5 * 60,
+    );
+    expect(checkpointParams.from_time).toBe(Math.floor(Date.now() / 1000) - 720 * 60);
     vi.useRealTimers();
   });
 
@@ -579,7 +585,7 @@ describe('mongoose payload builders', () => {
     updateOne.mockRestore();
   });
 
-  it('backfills missing countries without creating a profile when profiles already exist', async () => {
+  it('backfills existing profiles with default monitoring filters without creating a profile', async () => {
     const exists = vi
       .spyOn(SearchProfileModel, 'exists')
       .mockResolvedValue({ _id: new Types.ObjectId() } as never);
@@ -590,8 +596,19 @@ describe('mongoose payload builders', () => {
 
     expect(create).not.toHaveBeenCalled();
     expect(updateMany).toHaveBeenCalledWith(
-      { countries: { $size: 0 } },
-      { $set: { countries: defaultCountryCodes() } },
+      {},
+      {
+        $set: expect.objectContaining({
+          countries: defaultCountryCodes(),
+          currencies: [],
+          languages: ['en'],
+          minimumFixedBudget: 50,
+          maximumFixedBudget: 50000,
+          minimumHourlyRate: 20,
+          maximumHourlyRate: 100,
+          maximumBidCount: 200,
+        }),
+      },
     );
     exists.mockRestore();
     updateMany.mockRestore();
@@ -607,12 +624,13 @@ describe('mongoose payload builders', () => {
       jobIds: [...TARGET_SKILL_IDS],
       countries: defaultCountryCodes(),
       currencies: [],
-      languages: [],
+      languages: ['en'],
       projectTypes: ['fixed', 'hourly'],
-      minimumFixedBudget: null,
-      maximumFixedBudget: null,
-      minimumHourlyRate: null,
-      maximumHourlyRate: null,
+      minimumFixedBudget: 50,
+      maximumFixedBudget: 50000,
+      minimumHourlyRate: 20,
+      maximumHourlyRate: 100,
+      maximumBidCount: 200,
       pollIntervalSeconds: 30,
       maximumProjectAgeMinutes: 720,
       notificationEnabled: true,
@@ -622,7 +640,7 @@ describe('mongoose payload builders', () => {
     expect(
       projectMatches(payload, {
         ...realisticProject,
-        language: undefined,
+        language: 'en',
       }),
     ).toBe(true);
   });
