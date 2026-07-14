@@ -45,6 +45,14 @@ export const TARGET_SKILL_IDS = [
 ] as const;
 
 const targetSkillIds = (): number[] => [...TARGET_SKILL_IDS];
+export const DEFAULT_PROFILE_FILTERS = {
+  languages: ['en'],
+  minimumFixedBudget: 50,
+  maximumFixedBudget: 50000,
+  minimumHourlyRate: 20,
+  maximumHourlyRate: 100,
+  maximumBidCount: 200,
+} as const;
 export const defaultCountryCodes = (): string[] => ALLOWED_COUNTRIES.map((country) => country.code);
 export const syncActiveProfileTargetSkillIds = async (): Promise<boolean> => false;
 export const buildSearchProfileCreatePayload = (input: unknown): SearchProfileCreatePayload => {
@@ -167,8 +175,14 @@ export const seedSearchProfile = async (): Promise<void> => {
 
   if (existingProfile) {
     await SearchProfileModel.updateMany(
-      { countries: { $size: 0 } },
-      { $set: { countries: defaultCountryCodes() } },
+      {},
+      {
+        $set: {
+          ...DEFAULT_PROFILE_FILTERS,
+          countries: defaultCountryCodes(),
+          currencies: [],
+        },
+      },
     );
     return;
   }
@@ -183,12 +197,13 @@ export const seedSearchProfile = async (): Promise<void> => {
       jobIds: targetSkillIds(),
       countries: defaultCountryCodes(),
       currencies: [],
-      languages: [],
+      languages: [...DEFAULT_PROFILE_FILTERS.languages],
       projectTypes: ['fixed', 'hourly'],
-      minimumFixedBudget: null,
-      maximumFixedBudget: null,
-      minimumHourlyRate: null,
-      maximumHourlyRate: null,
+      minimumFixedBudget: DEFAULT_PROFILE_FILTERS.minimumFixedBudget,
+      maximumFixedBudget: DEFAULT_PROFILE_FILTERS.maximumFixedBudget,
+      minimumHourlyRate: DEFAULT_PROFILE_FILTERS.minimumHourlyRate,
+      maximumHourlyRate: DEFAULT_PROFILE_FILTERS.maximumHourlyRate,
+      maximumBidCount: DEFAULT_PROFILE_FILTERS.maximumBidCount,
       pollIntervalSeconds: 30,
       maximumProjectAgeMinutes: 720,
       notificationEnabled: true,
