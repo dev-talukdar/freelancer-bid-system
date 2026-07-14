@@ -20,6 +20,16 @@ export interface FreelancerJob {
   seo_url?: string;
 }
 
+export type FreelancerId = number | string;
+
+export type FreelancerCountryValue =
+  | {
+      name?: string | null;
+      code?: string | null;
+    }
+  | string
+  | null;
+
 export interface FreelancerProject {
   id: number;
   title: string;
@@ -42,7 +52,9 @@ export interface FreelancerProject {
   bid_stats?: { bid_count?: number; bid_avg?: number };
   jobs?: FreelancerJob[];
   upgrades?: Record<string, unknown>;
-  location?: { country?: { name?: string; code?: string } | string };
+  location?: {
+    country?: FreelancerCountryValue;
+  };
   owner_id?: number;
   owner?: { id?: number; username?: string };
 }
@@ -50,8 +62,10 @@ export interface FreelancerProject {
 export interface FreelancerUser {
   id?: number;
   username?: string;
-  location?: { country?: { name?: string; code?: string } | string };
-  country?: { name?: string; code?: string } | string;
+  location?: {
+    country?: FreelancerCountryValue;
+  };
+  country?: FreelancerCountryValue;
 }
 
 export interface FreelancerActiveProjectsResult {
@@ -85,7 +99,7 @@ export interface NormalizedProject {
   jobs: NormalizedProjectJob[];
   clientCountry?: string;
   clientCountryCode?: string;
-  ownerId?: number;
+  ownerId?: FreelancerId;
 }
 
 export interface AlertProcessingResult {

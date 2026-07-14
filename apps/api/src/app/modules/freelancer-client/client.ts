@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { env } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { mapFreelancerError } from '../../error/app-error.js';
@@ -23,6 +25,44 @@ type WrappedActiveProjectsResult = { result?: FreelancerActiveProjectsResult };
 const hasWrappedResult = (
   data: FreelancerActiveProjectsResult | WrappedActiveProjectsResult,
 ): data is WrappedActiveProjectsResult => 'result' in data;
+
+const normalizeIdKey = (value: number | string | null | undefined): string | undefined => {
+  if (value === null || value === undefined) return undefined;
+
+  const normalized = String(value).trim();
+
+  return normalized.length > 0 ? normalized : undefined;
+};
+
+const buildUserLookup = (
+  users: FreelancerActiveProjectsResult['users'],
+): Map<string, FreelancerUser> => {
+  const lookup = new Map<string, FreelancerUser>();
+
+  if (Array.isArray(users)) {
+    for (const user of users) {
+      const id = normalizeIdKey(user.id);
+
+      if (id !== undefined) {
+        lookup.set(id, user);
+      }
+    }
+
+    return lookup;
+  }
+
+  for (const [responseKey, user] of Object.entries(users ?? {})) {
+    lookup.set(responseKey, user);
+
+    const userId = normalizeIdKey(user.id);
+
+    if (userId !== undefined) {
+      lookup.set(userId, user);
+    }
+  }
+
+  return lookup;
+};
 
 export class FreelancerClient {
   public rateLimitState: RateLimitState = { windows: [] };
@@ -77,35 +117,78 @@ export class FreelancerClient {
   async activeProjects(params: ProjectSearchParams) {
     const pageSize = params.limit ?? 100;
     const startOffset = params.offset ?? 0;
-    const projects: FreelancerProject[] = [];
+
+    const projects: Array<
+      FreelancerProject & {
+        __owner?: FreelancerUser;
+      }
+    > = [];
 
     for (let page = 0; page < MAX_ACTIVE_PROJECT_PAGES; page++) {
-      const pageParams = { ...params, limit: pageSize, offset: startOffset + page * pageSize };
+      const pageParams = {
+        ...params,
+        limit: pageSize,
+        offset: startOffset + page * pageSize,
+      };
+
       const data = await this.get<WrappedActiveProjectsResult | FreelancerActiveProjectsResult>(
         ACTIVE_PROJECTS_PATH,
         buildFreelancerQuery(pageParams),
       );
+
       const result: FreelancerActiveProjectsResult | undefined = hasWrappedResult(data)
         ? data.result
         : data;
-      const pageProjects: FreelancerProject[] = result?.projects ?? [];
-      const users = result?.users ?? {};
-      projects.push(
-        ...pageProjects.map(
-          (project) =>
-            ({
-              ...project,
-              __owner: users[String(project.owner_id ?? project.owner?.id ?? '')],
-            }) as FreelancerProject & { __owner?: FreelancerUser },
-        ),
-      );
-      if (pageProjects.length < pageSize) break;
+
+      const pageProjects = result?.projects ?? [];
+      const userLookup = buildUserLookup(result?.users);
+
+      const sampleProject = pageProjects[0];
+
+      if (page === 0 && sampleProject !== undefined) {
+        const sampleOwnerId = normalizeIdKey(sampleProject.owner_id ?? sampleProject.owner?.id);
+
+        const sampleOwner = sampleOwnerId === undefined ? undefined : userLookup.get(sampleOwnerId);
+
+        logger.info(
+          {
+            projectsReturned: pageProjects.length,
+            rawUsersShape: Array.isArray(result?.users) ? 'array' : typeof result?.users,
+            usersIndexed: userLookup.size,
+
+            sampleProjectId: sampleProject.id,
+            sampleOwnerId,
+            sampleOwnerFound: sampleOwner !== undefined,
+
+            sampleProjectLocationCountry: sampleProject.location?.country,
+
+            sampleOwnerCountry: sampleOwner?.country,
+
+            sampleOwnerLocationCountry: sampleOwner?.location?.country,
+          },
+          'freelancer owner country response diagnostic',
+        );
+      }
+
+      for (const project of pageProjects) {
+        const ownerId = normalizeIdKey(project.owner_id ?? project.owner?.id);
+
+        const owner = ownerId === undefined ? undefined : userLookup.get(ownerId);
+
+        projects.push({
+          ...project,
+          ...(owner === undefined ? {} : { __owner: owner }),
+        });
+      }
+
+      if (pageProjects.length < pageSize) {
+        break;
+      }
     }
 
     return projects.map((project) => {
-      const { __owner, ...freelancerProject } = project as FreelancerProject & {
-        __owner?: FreelancerUser;
-      };
+      const { __owner, ...freelancerProject } = project;
+
       return normalizeFreelancerProject(freelancerProject, __owner);
     });
   }

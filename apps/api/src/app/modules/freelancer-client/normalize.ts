@@ -1,5 +1,6 @@
 import { normalizeCountryCode, normalizeCurrencyCode } from './allowlists.js';
 import type {
+  FreelancerCountryValue,
   FreelancerProject,
   FreelancerUser,
   KnownProjectType,
@@ -21,16 +22,59 @@ export const normalizeOptionalText = (value: string | undefined): string | undef
   return normalized || undefined;
 };
 
-const ownerCountry = (owner: FreelancerUser | undefined) =>
-  owner?.location?.country ?? owner?.country;
+const resolveCountryCode = (
+  countries: Array<FreelancerCountryValue | undefined>,
+): string | undefined => {
+  for (const country of countries) {
+    const rawCode = typeof country === 'string' ? country : (country?.code ?? undefined);
 
-type FreelancerCountry = { name?: string; code?: string } | string | undefined;
+    const normalizedCode = normalizeCountryCode(rawCode);
 
-const countryName = (country: FreelancerCountry) =>
-  typeof country === 'string' ? country : country?.name;
+    if (normalizedCode !== undefined) {
+      return normalizedCode;
+    }
+  }
 
-const countryCode = (country: FreelancerCountry) =>
-  typeof country === 'string' ? undefined : country?.code;
+  return undefined;
+};
+
+const resolveCountryName = (
+  countries: Array<FreelancerCountryValue | undefined>,
+): string | undefined => {
+  for (const country of countries) {
+    if (typeof country === 'string') {
+      const value = country.trim();
+
+      if (value.length === 0) continue;
+
+      // A value such as "US" is a code, not a country name.
+      if (normalizeCountryCode(value) !== undefined) {
+        continue;
+      }
+
+      return value;
+    }
+
+    const name = country?.name?.trim();
+
+    if (name) {
+      return name;
+    }
+  }
+
+  return undefined;
+};
+
+// const ownerCountry = (owner: FreelancerUser | undefined) =>
+//   owner?.location?.country ?? owner?.country;
+
+// type FreelancerCountry = { name?: string; code?: string } | string | undefined;
+
+// const countryName = (country: FreelancerCountry) =>
+//   typeof country === 'string' ? country : country?.name;
+
+// const countryCode = (country: FreelancerCountry) =>
+//   typeof country === 'string' ? undefined : country?.code;
 
 export function normalizeFreelancerProject(
   project: FreelancerProject,
@@ -100,12 +144,21 @@ export function normalizeFreelancerProject(
     normalized.bidStats = bidStats;
   }
 
-  const country = project.location?.country ?? ownerCountry(owner);
-  const clientCountry = countryName(country);
-  if (clientCountry !== undefined) normalized.clientCountry = clientCountry;
+  const countryCandidates: Array<FreelancerCountryValue | undefined> = [
+    owner?.country,
+    owner?.location?.country,
+    project.location?.country,
+  ];
+  const clientCountryCode = resolveCountryCode(countryCandidates);
 
-  const clientCountryCode = normalizeCountryCode(countryCode(country));
-  if (clientCountryCode !== undefined) normalized.clientCountryCode = clientCountryCode;
+  if (clientCountryCode !== undefined) {
+    normalized.clientCountryCode = clientCountryCode;
+  }
+  const clientCountry = resolveCountryName(countryCandidates);
+
+  if (clientCountry !== undefined) {
+    normalized.clientCountry = clientCountry;
+  }
 
   const ownerId = project.owner_id ?? project.owner?.id;
   if (ownerId !== undefined) normalized.ownerId = ownerId;

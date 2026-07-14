@@ -45,15 +45,25 @@ const projectIsoDate = (timestamp: number | undefined): string | undefined =>
 
 const normalizedProjectSummary = (profile: SearchProfileDocument, project: NormalizedProject) => ({
   id: project.id,
+  ownerId: project.ownerId,
+
   title: project.title,
   status: project.status,
   frontendProjectStatus: project.frontendProjectStatus,
   deleted: project.deleted,
+
   submittedAt: projectIsoDate(project.timeSubmitted),
   updatedAt: projectIsoDate(project.timeUpdated),
   activityAgeMinutes: projectAgeMinutes(project),
+
+  clientCountryCode: project.clientCountryCode,
+  clientCountry: project.clientCountry,
+
+  currencyCode: project.currency?.code,
+
   skillIds: project.jobs.map((job) => job.id),
   skillNames: project.jobs.map((job) => job.name),
+
   skipReason: projectSkipReason(profile, project),
 });
 
@@ -141,13 +151,10 @@ export function buildMonitorSearchParams(
   const maximumProjectAgeMinutes =
     profile.maximumProjectAgeMinutes ?? DEFAULT_MAXIMUM_PROJECT_AGE_MINUTES;
   const profileFromTime = unixSecondsNow() - maximumProjectAgeMinutes * 60;
-  // Always keep the full configured recency window in the Freelancer query.
-  // The checkpoint is used only as an overlap optimization; using it as the only
-  // lower bound can hide projects that are still within maximumProjectAgeMinutes
-  // (for example, projects posted up to 12 hours ago when polling every 30s).
   const fromTime = Math.min(checkpointFromTime ?? profileFromTime, profileFromTime);
 
   const params: ProjectSearchParams = {
+    location_details: true,
     from_time: fromTime,
     sort_field: 'time_updated',
     reverse_sort: false,
@@ -278,6 +285,24 @@ export class ProjectMonitor {
             skipReasons.invalidShape++;
             continue;
           }
+
+          const countryUnavailable =
+            profile.countries.length > 0 &&
+            project.clientCountryCode === undefined &&
+            project.clientCountry === undefined;
+
+          if (countryUnavailable) {
+            logger.debug(
+              {
+                projectId: project.id,
+                ownerId: project.ownerId,
+                configuredCountries: profile.countries,
+                verificationSource: 'freelancer-countries-query-filter',
+              },
+              'project country unavailable locally; relying on Freelancer upstream country filter',
+            );
+          }
+
           const reason = projectSkipReason(profile, project);
           if (reason) {
             skipReasons[reason]++;
@@ -296,7 +321,9 @@ export class ProjectMonitor {
                 projectSkillIds: project.jobs.map((job) => job.id),
                 projectSkillNames: project.jobs.map((job) => job.name),
                 configuredSkillIds: profile.jobIds,
-                country: project.clientCountryCode ?? project.clientCountry,
+                ownerId: project.ownerId,
+                clientCountryCode: project.clientCountryCode,
+                clientCountry: project.clientCountry,
                 countryFilter: 'authoritative allowlist',
                 currency: project.currency?.code,
                 currencyFilter: 'authoritative allowlist',

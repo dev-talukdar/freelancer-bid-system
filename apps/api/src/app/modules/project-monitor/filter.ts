@@ -18,6 +18,7 @@ export type SkipReason =
   | 'keywordMismatch'
   | 'excludedKeyword'
   | 'jobMismatch'
+  | 'countryUnavailable'
   | 'countryMismatch'
   | 'languageMismatch'
   | 'currencyMismatch'
@@ -44,6 +45,7 @@ export const createSkipReasons = (): Record<SkipReason, number> => ({
   fixedBudgetMismatch: 0,
   hourlyRateMismatch: 0,
   duplicate: 0,
+  countryUnavailable: 0,
 });
 
 export type ProjectFilterProfile = Pick<
@@ -232,8 +234,17 @@ export function projectSkipReason(
     .filter((code): code is string => code !== undefined);
   if (profileCountries.length > 0) {
     const clientCountryCode = projectClientCountryCode(project);
-    if (clientCountryCode === undefined || !profileCountries.includes(clientCountryCode))
+
+    // The same country codes are already sent to Freelancer through
+    // countries[]. Some active-project responses omit owner-country
+    // projections even when user_country_details=true.
+    //
+    // When country data is available, verify it locally.
+    // When it is unavailable, rely on Freelancer's upstream filter
+    // instead of rejecting every returned project.
+    if (clientCountryCode !== undefined && !profileCountries.includes(clientCountryCode)) {
       return 'countryMismatch';
+    }
   }
 
   const projectCurrencyCode = normalizeCurrencyCode(project.currency?.code);
