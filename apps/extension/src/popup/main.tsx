@@ -7,7 +7,7 @@ import { LocalApiClient } from '../services/local-api.js';
 import { clearNotifiedIds, getSettings } from '../storage/settings.js';
 import './style.css';
 import { ApiKeyStatus, buildPopupViewModel, MonitorStatus } from './view-model.js';
-import { formatBangladeshDateTime, formatRelativeTime } from '../utils/time.js';
+import { formatBangladeshDateTime } from '../utils/time.js';
 
 const badgeClass = (tone: 'green' | 'red' | 'amber' | 'slate') => `badge badge-${tone}`;
 const statusTone = (status: MonitorStatus) =>
@@ -77,7 +77,6 @@ function App() {
   const [isPolling, setIsPolling] = useState(false);
   const [actionPending, setActionPending] = useState(false);
   const [isClearingProjects, setIsClearingProjects] = useState(false);
-  const [now, setNow] = useState(() => new Date());
 
   const load = async () => {
     const settings = await getSettings();
@@ -97,11 +96,6 @@ function App() {
     void load().catch((e: unknown) =>
       setError(e instanceof Error ? e.message : 'Failed to connect'),
     );
-  }, []);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 1000);
-    return () => window.clearInterval(timer);
   }, []);
 
   const view = useMemo(
@@ -207,15 +201,13 @@ function App() {
         <StatusRow label="Last poll">
           <span>
             {view.lastPollAt
-              ? `${formatBangladeshDateTime(view.lastPollAt)} • ${formatRelativeTime(view.lastPollAt, now)}`
+              ? `${formatBangladeshDateTime(view.lastPollAt)}    `
               : 'Not polled yet'}
           </span>
         </StatusRow>
         <StatusRow label="Next poll">
           <span>
-            {view.nextPollAt
-              ? `${formatRelativeTime(view.nextPollAt, now)} • ${formatBangladeshDateTime(view.nextPollAt)}`
-              : 'Not available'}
+            {view.nextPollAt ? ` ${formatBangladeshDateTime(view.nextPollAt)}` : 'Not available'}
           </span>
         </StatusRow>
         <StatusRow label="Interval">
