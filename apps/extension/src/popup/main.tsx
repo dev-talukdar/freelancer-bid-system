@@ -4,10 +4,10 @@ import { createRoot } from 'react-dom/client';
 import type { DetectedProjectDto, HealthDto } from '@fbs/shared';
 import { toFreelancerProjectUrl } from '@fbs/shared';
 import { LocalApiClient } from '../services/local-api.js';
-import { getSettings, saveSettings } from '../storage/settings.js';
+import { clearNotifiedIds, getSettings } from '../storage/settings.js';
 import './style.css';
-import { ApiKeyStatus, buildPopupViewModel, MonitorStatus, trimSecret } from './view-model.js';
-import { formatBangladeshDateTime, formatRelativeTime } from '../utils/time.js';
+import { ApiKeyStatus, buildPopupViewModel, MonitorStatus } from './view-model.js';
+import { formatBangladeshDateTime } from '../utils/time.js';
 
 const badgeClass = (tone: 'green' | 'red' | 'amber' | 'slate') => `badge badge-${tone}`;
 const statusTone = (status: MonitorStatus) =>
@@ -41,58 +41,6 @@ function StatusRow({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
-function SecretField({
-  value,
-  savedValue,
-  saving,
-  onChange,
-  onSave,
-}: {
-  value: string;
-  savedValue: string;
-  saving: boolean;
-  onChange: (value: string) => void;
-  onSave: () => void;
-}) {
-  const [visible, setVisible] = useState(false);
-  const trimmed = trimSecret(value);
-  const dirty = trimmed !== savedValue;
-  return (
-    <section className="card secret-card">
-      <div className="section-title">Local API secret</div>
-      <div className="secret-row">
-        <input
-          aria-label="Local API secret"
-          className="secret-input"
-          type={visible ? 'text' : 'password'}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder="Enter local API secret"
-        />
-        <button
-          aria-label={visible ? 'Hide API secret' : 'Show API secret'}
-          className="btn btn-ghost"
-          type="button"
-          onClick={() => setVisible((current) => !current)}
-        >
-          {visible ? 'Hide' : 'Show'}
-        </button>
-        <button
-          className="btn btn-primary"
-          type="button"
-          disabled={!dirty || !trimmed || saving}
-          onClick={onSave}
-        >
-          {saving ? 'Saving…' : 'Save'}
-        </button>
-      </div>
-      <p className="hint">
-        {dirty ? 'Unsaved changes' : savedValue ? 'Saved and masked' : 'Secret required'}
-      </p>
-    </section>
-  );
-}
-
 function RecentProjectCard({ project }: { project: DetectedProjectDto }) {
   const skills = project.jobs.map((job) => job.name).join(', ') || 'No skills listed';
   const budget =
@@ -122,20 +70,17 @@ function RecentProjectCard({ project }: { project: DetectedProjectDto }) {
 
 function App() {
   const [secret, setSecret] = useState('');
-  const [savedSecret, setSavedSecret] = useState('');
   const [health, setHealth] = useState<HealthDto>();
   const [projects, setProjects] = useState<DetectedProjectDto[]>([]);
   const [error, setError] = useState('');
   const [feedback, setFeedback] = useState('');
   const [isPolling, setIsPolling] = useState(false);
-  const [isSavingSecret, setIsSavingSecret] = useState(false);
   const [actionPending, setActionPending] = useState(false);
-  const [now, setNow] = useState(() => new Date());
+  const [isClearingProjects, setIsClearingProjects] = useState(false);
 
   const load = async () => {
     const settings = await getSettings();
     setSecret(settings.localApiSecret);
-    setSavedSecret(settings.localApiSecret);
     if (!settings.localApiSecret) {
       setHealth(undefined);
       setProjects([]);
@@ -151,11 +96,6 @@ function App() {
     void load().catch((e: unknown) =>
       setError(e instanceof Error ? e.message : 'Failed to connect'),
     );
-  }, []);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 1000);
-    return () => window.clearInterval(timer);
   }, []);
 
   const view = useMemo(
@@ -195,21 +135,23 @@ function App() {
     }
   };
 
-  const save = async () => {
-    const trimmed = trimSecret(secret);
-    if (!trimmed || trimmed === savedSecret) return;
-    setIsSavingSecret(true);
+  const clearProjects = async () => {
+    setIsClearingProjects(true);
     setFeedback('');
     try {
-      await saveSettings({ apiBaseUrl: 'http://127.0.0.1:4300', localApiSecret: trimmed });
-      setSecret(trimmed);
-      setSavedSecret(trimmed);
-      setFeedback('Secret saved');
+      const api = new LocalApiClient(await getSettings());
+      const result = await api.clearDetectedProjects();
+      await clearNotifiedIds();
+      setProjects([]);
+      setFeedback(
+        `Cleared ${result.deletedCount} stored projects. New detections will appear only when posted.`,
+      );
       await load();
-    } catch {
-      setFeedback('Secret save failed');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Clear failed');
+      setFeedback('Clear failed');
     } finally {
-      setIsSavingSecret(false);
+      setIsClearingProjects(false);
     }
   };
 
@@ -227,16 +169,6 @@ function App() {
           {titleCase(view.monitorStatus)}
         </div>
       </header>
-
-      <SecretField
-        value={secret}
-        savedValue={savedSecret}
-        saving={isSavingSecret}
-        onChange={setSecret}
-        onSave={() => {
-          void save();
-        }}
-      />
 
       {(error || feedback) && (
         <p className={error ? 'notice notice-error' : 'notice'} aria-live="polite">
@@ -269,15 +201,13 @@ function App() {
         <StatusRow label="Last poll">
           <span>
             {view.lastPollAt
-              ? `${formatBangladeshDateTime(view.lastPollAt)} • ${formatRelativeTime(view.lastPollAt, now)}`
+              ? `${formatBangladeshDateTime(view.lastPollAt)}    `
               : 'Not polled yet'}
           </span>
         </StatusRow>
         <StatusRow label="Next poll">
           <span>
-            {view.nextPollAt
-              ? `${formatRelativeTime(view.nextPollAt, now)} • ${formatBangladeshDateTime(view.nextPollAt)}`
-              : 'Not available'}
+            {view.nextPollAt ? ` ${formatBangladeshDateTime(view.nextPollAt)}` : 'Not available'}
           </span>
         </StatusRow>
         <StatusRow label="Interval">
@@ -309,7 +239,18 @@ function App() {
       </section>
 
       <section className="recent">
-        <h2>Recent projects</h2>
+        <div className="recent-header">
+          <h2>Recent projects</h2>
+          <button
+            className="btn btn-danger"
+            type="button"
+            onClick={() => {
+              void clearProjects();
+            }}
+          >
+            {isClearingProjects ? 'Clearing…' : 'Clear projects'}
+          </button>
+        </div>
         {projects.length === 0 ? (
           <div className="empty">
             <strong>No recent projects yet</strong>

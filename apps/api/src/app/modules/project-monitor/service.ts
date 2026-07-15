@@ -1,3 +1,5 @@
+ 
+ 
 import {
   DEFAULT_MAXIMUM_PROJECT_AGE_MINUTES,
   DEFAULT_POLL_INTERVAL_SECONDS,
@@ -8,6 +10,7 @@ import { logger } from '../../config/logger.js';
 import { env } from '../../config/env.js';
 import { FreelancerClient } from '../freelancer-client/client.js';
 import { DetectedProjectModel } from '../detected-project/model.js';
+import { pruneOldDetectedProjects } from '../detected-project/service.js';
 import { createSkipReasons, projectActivityDate, projectSkipReason } from './filter.js';
 import { PollLock } from './lock.js';
 import { ProjectMonitorCheckpointModel } from './checkpoint-model.js';
@@ -357,6 +360,8 @@ export class ProjectMonitor {
             $lt: new Date(Date.now() - env.DETECTED_PROJECT_RETENTION_DAYS * 86400_000),
           },
         });
+         
+        const pruneResult = await pruneOldDetectedProjects();
         const newestActivity = projects.reduce<Date | undefined>((latest, project) => {
           if (!project) return latest;
           const activityAt = projectActivityDate(project);
@@ -384,6 +389,8 @@ export class ProjectMonitor {
             duplicatesSkipped: skipReasons.duplicate,
             skipped,
             skipReasons,
+            prunedOldDetectedProjects: pruneResult.deletedCount,
+            staleDetectedProjectsBeforePrune: pruneResult.staleCount,
             durationMs: Date.now() - started,
             nextPollIntervalSeconds: this.state.currentPollingIntervalSeconds,
             rateLimit: this.client.rateLimitState,

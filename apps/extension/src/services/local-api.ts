@@ -68,8 +68,15 @@ export class LocalApiClient {
   opened(id: string) {
     return this.request<unknown>(`/api/v1/detected-projects/${id}/opened`, { method: 'PATCH' });
   }
+  clearDetectedProjects() {
+    return this.request<{ deletedCount: number }>('/api/v1/detected-projects', {
+      method: 'DELETE',
+    });
+  }
 }
+const configuredLocalApiSecret = (import.meta.env.VITE_LOCAL_API_SECRET ?? '').trim();
+
 export const defaultSettings: ExtensionSettings = {
-  localApiSecret: '',
+  localApiSecret: configuredLocalApiSecret,
   apiBaseUrl: LOCAL_API_BASE_URL,
 };

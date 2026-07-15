@@ -18,7 +18,12 @@ export async function ensurePollingAlarm() {
 
 export async function initializePolling() {
   await ensurePollingAlarm();
-  await check();
+  const settings = await getSettings();
+  if (!settings.localApiSecret) return;
+
+  const api = new LocalApiClient(settings);
+  await api.start();
+  await check(api);
 }
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -71,10 +76,13 @@ export async function notifyProject(
   }
 }
 
-export async function check() {
-  const settings = await getSettings();
-  if (!settings.localApiSecret) return;
-  const api = new LocalApiClient(settings);
+export async function check(api?: LocalApiClient) {
+  if (!api) {
+    const settings = await getSettings();
+    if (!settings.localApiSecret) return;
+    api = new LocalApiClient(settings);
+  }
+
   const response = await api.unnotified(10);
   console.info('Fetched unnotified Freelancer projects', {
     count: response.items.length,
