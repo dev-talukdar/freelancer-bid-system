@@ -6,7 +6,12 @@ const maxDedupeEntries = 500;
 
 export async function getSettings(): Promise<ExtensionSettings> {
   const data = await chrome.storage.local.get(keys.settings);
-  return { ...defaultSettings, ...(data[keys.settings] as Partial<ExtensionSettings> | undefined) };
+  const stored = data[keys.settings] as Partial<ExtensionSettings> | undefined;
+  return {
+    ...defaultSettings,
+    ...stored,
+    localApiSecret: defaultSettings.localApiSecret || stored?.localApiSecret || '',
+  };
 }
 export const saveSettings = (settings: ExtensionSettings) =>
   chrome.storage.local.set({ [keys.settings]: settings });

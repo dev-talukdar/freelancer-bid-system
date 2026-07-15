@@ -74,7 +74,9 @@ export class LocalApiClient {
     });
   }
 }
+const configuredLocalApiSecret = (import.meta.env.VITE_LOCAL_API_SECRET ?? '').trim();
+
 export const defaultSettings: ExtensionSettings = {
-  localApiSecret: '',
+  localApiSecret: configuredLocalApiSecret,
   apiBaseUrl: LOCAL_API_BASE_URL,
 };

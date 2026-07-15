@@ -4,9 +4,9 @@ import { createRoot } from 'react-dom/client';
 import type { DetectedProjectDto, HealthDto } from '@fbs/shared';
 import { toFreelancerProjectUrl } from '@fbs/shared';
 import { LocalApiClient } from '../services/local-api.js';
-import { clearNotifiedIds, getSettings, saveSettings } from '../storage/settings.js';
+import { clearNotifiedIds, getSettings } from '../storage/settings.js';
 import './style.css';
-import { ApiKeyStatus, buildPopupViewModel, MonitorStatus, trimSecret } from './view-model.js';
+import { ApiKeyStatus, buildPopupViewModel, MonitorStatus } from './view-model.js';
 import { formatBangladeshDateTime, formatRelativeTime } from '../utils/time.js';
 
 const badgeClass = (tone: 'green' | 'red' | 'amber' | 'slate') => `badge badge-${tone}`;
@@ -41,58 +41,6 @@ function StatusRow({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
-function SecretField({
-  value,
-  savedValue,
-  saving,
-  onChange,
-  onSave,
-}: {
-  value: string;
-  savedValue: string;
-  saving: boolean;
-  onChange: (value: string) => void;
-  onSave: () => void;
-}) {
-  const [visible, setVisible] = useState(false);
-  const trimmed = trimSecret(value);
-  const dirty = trimmed !== savedValue;
-  return (
-    <section className="card secret-card">
-      <div className="section-title">Local API secret</div>
-      <div className="secret-row">
-        <input
-          aria-label="Local API secret"
-          className="secret-input"
-          type={visible ? 'text' : 'password'}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder="Enter local API secret"
-        />
-        <button
-          aria-label={visible ? 'Hide API secret' : 'Show API secret'}
-          className="btn btn-ghost"
-          type="button"
-          onClick={() => setVisible((current) => !current)}
-        >
-          {visible ? 'Hide' : 'Show'}
-        </button>
-        <button
-          className="btn btn-primary"
-          type="button"
-          disabled={!dirty || !trimmed || saving}
-          onClick={onSave}
-        >
-          {saving ? 'Saving…' : 'Save'}
-        </button>
-      </div>
-      <p className="hint">
-        {dirty ? 'Unsaved changes' : savedValue ? 'Saved and masked' : 'Secret required'}
-      </p>
-    </section>
-  );
-}
-
 function RecentProjectCard({ project }: { project: DetectedProjectDto }) {
   const skills = project.jobs.map((job) => job.name).join(', ') || 'No skills listed';
   const budget =
@@ -122,13 +70,11 @@ function RecentProjectCard({ project }: { project: DetectedProjectDto }) {
 
 function App() {
   const [secret, setSecret] = useState('');
-  const [savedSecret, setSavedSecret] = useState('');
   const [health, setHealth] = useState<HealthDto>();
   const [projects, setProjects] = useState<DetectedProjectDto[]>([]);
   const [error, setError] = useState('');
   const [feedback, setFeedback] = useState('');
   const [isPolling, setIsPolling] = useState(false);
-  const [isSavingSecret, setIsSavingSecret] = useState(false);
   const [actionPending, setActionPending] = useState(false);
   const [isClearingProjects, setIsClearingProjects] = useState(false);
   const [now, setNow] = useState(() => new Date());
@@ -136,7 +82,6 @@ function App() {
   const load = async () => {
     const settings = await getSettings();
     setSecret(settings.localApiSecret);
-    setSavedSecret(settings.localApiSecret);
     if (!settings.localApiSecret) {
       setHealth(undefined);
       setProjects([]);
@@ -196,24 +141,6 @@ function App() {
     }
   };
 
-  const save = async () => {
-    const trimmed = trimSecret(secret);
-    if (!trimmed || trimmed === savedSecret) return;
-    setIsSavingSecret(true);
-    setFeedback('');
-    try {
-      await saveSettings({ apiBaseUrl: 'http://127.0.0.1:4300', localApiSecret: trimmed });
-      setSecret(trimmed);
-      setSavedSecret(trimmed);
-      setFeedback('Secret saved');
-      await load();
-    } catch {
-      setFeedback('Secret save failed');
-    } finally {
-      setIsSavingSecret(false);
-    }
-  };
-
   const clearProjects = async () => {
     setIsClearingProjects(true);
     setFeedback('');
@@ -248,16 +175,6 @@ function App() {
           {titleCase(view.monitorStatus)}
         </div>
       </header>
-
-      <SecretField
-        value={secret}
-        savedValue={savedSecret}
-        saving={isSavingSecret}
-        onChange={setSecret}
-        onSave={() => {
-          void save();
-        }}
-      />
 
       {(error || feedback) && (
         <p className={error ? 'notice notice-error' : 'notice'} aria-live="polite">
@@ -335,7 +252,6 @@ function App() {
           <button
             className="btn btn-danger"
             type="button"
-            disabled={isClearingProjects || !savedSecret}
             onClick={() => {
               void clearProjects();
             }}
