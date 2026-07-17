@@ -1,5 +1,4 @@
 import {
-  LOCAL_API_BASE_URL,
   type ApiResponse,
   type HealthDto,
   type MonitorPollResultDto,
@@ -11,6 +10,15 @@ import {
 export interface ExtensionSettings {
   localApiSecret: string;
   apiBaseUrl: string;
+}
+
+export function normalizeApiBaseUrl(value: string) {
+  const normalized = value.trim().replace(/\/+$/, '');
+  const url = new URL(normalized);
+  if (!['https:', 'http:'].includes(url.protocol) || url.pathname !== '/') {
+    throw new Error('Backend URL must be an HTTP(S) origin without a path');
+  }
+  return url.origin;
 }
 
 export async function parseApiResponse<T>(res: Response): Promise<T> {
@@ -75,8 +83,9 @@ export class LocalApiClient {
   }
 }
 const configuredLocalApiSecret = (import.meta.env.VITE_LOCAL_API_SECRET ?? '').trim();
+const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'https://api.enaema.net';
 
 export const defaultSettings: ExtensionSettings = {
   localApiSecret: configuredLocalApiSecret,
-  apiBaseUrl: LOCAL_API_BASE_URL,
+  apiBaseUrl: normalizeApiBaseUrl(configuredApiBaseUrl),
 };

@@ -11,12 +11,14 @@ const repositoryRoot = resolve(__dirname, '../..');
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, repositoryRoot, '');
   const localApiSecret = env.VITE_LOCAL_API_SECRET ?? env.LOCAL_API_SECRET ?? '';
+  const apiBaseUrl = env.VITE_API_BASE_URL ?? 'https://api.enaema.net';
 
   return {
     envDir: repositoryRoot,
     plugins: [react()],
     define: {
       'import.meta.env.VITE_LOCAL_API_SECRET': JSON.stringify(localApiSecret),
+      'import.meta.env.VITE_API_BASE_URL': JSON.stringify(apiBaseUrl),
     },
 
     test: {

@@ -3,8 +3,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { DetectedProjectDto, HealthDto } from '@fbs/shared';
 import { toFreelancerProjectUrl } from '@fbs/shared';
-import { LocalApiClient } from '../services/local-api.js';
-import { clearNotifiedIds, getSettings } from '../storage/settings.js';
+import { LocalApiClient, normalizeApiBaseUrl } from '../services/local-api.js';
+import { clearNotifiedIds, getSettings, saveSettings } from '../storage/settings.js';
 import './style.css';
 import { ApiKeyStatus, buildPopupViewModel, MonitorStatus } from './view-model.js';
 import { formatBangladeshDateTime } from '../utils/time.js';
@@ -70,6 +70,7 @@ function RecentProjectCard({ project }: { project: DetectedProjectDto }) {
 
 function App() {
   const [secret, setSecret] = useState('');
+  const [apiBaseUrl, setApiBaseUrl] = useState('');
   const [health, setHealth] = useState<HealthDto>();
   const [projects, setProjects] = useState<DetectedProjectDto[]>([]);
   const [error, setError] = useState('');
@@ -81,6 +82,7 @@ function App() {
   const load = async () => {
     const settings = await getSettings();
     setSecret(settings.localApiSecret);
+    setApiBaseUrl(settings.apiBaseUrl);
     if (!settings.localApiSecret) {
       setHealth(undefined);
       setProjects([]);
@@ -90,6 +92,28 @@ function App() {
     setHealth(await api.health());
     setProjects((await api.detected(false, 5)).items);
     setError('');
+  };
+
+  const saveConnection = async () => {
+    setActionPending(true);
+    setFeedback('');
+    try {
+      const settings = {
+        apiBaseUrl: normalizeApiBaseUrl(apiBaseUrl),
+        localApiSecret: secret.trim(),
+      };
+      await saveSettings(settings);
+      setApiBaseUrl(settings.apiBaseUrl);
+      setSecret(settings.localApiSecret);
+      setError('');
+      setFeedback('Connection settings saved');
+      await load();
+      await chrome.runtime.sendMessage({ type: 'SETTINGS_UPDATED' });
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Could not save connection settings');
+    } finally {
+      setActionPending(false);
+    }
   };
 
   useEffect(() => {
@@ -175,6 +199,34 @@ function App() {
           {feedback || error}
         </p>
       )}
+
+      <section className="card connection-card" aria-label="Backend connection settings">
+        <label htmlFor="api-base-url">Backend URL</label>
+        <input
+          id="api-base-url"
+          className="secret-input"
+          type="url"
+          value={apiBaseUrl}
+          placeholder="https://api.enaema.net"
+          onChange={(event) => setApiBaseUrl(event.target.value)}
+        />
+        <label htmlFor="local-api-key">API key</label>
+        <div className="secret-row">
+          <input
+            id="local-api-key"
+            className="secret-input"
+            type="password"
+            value={secret}
+            placeholder="LOCAL_API_SECRET from the backend"
+            autoComplete="off"
+            onChange={(event) => setSecret(event.target.value)}
+          />
+          <button className="btn btn-secondary" type="button" onClick={() => void saveConnection()}>
+            Save
+          </button>
+        </div>
+        <p className="hint">The key must exactly match LOCAL_API_SECRET on the EC2 backend.</p>
+      </section>
 
       <section className="card status-card" aria-label="Connection and monitoring status">
         <StatusRow label="Backend">

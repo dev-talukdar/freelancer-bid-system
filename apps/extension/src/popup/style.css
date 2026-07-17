@@ -161,6 +161,16 @@ p {
   outline: 2px solid #2563eb;
   outline-offset: 2px;
 }
+.connection-card label {
+  display: block;
+  margin: 0 0 5px;
+  color: #334155;
+  font-weight: 700;
+}
+.connection-card > .secret-input {
+  width: 100%;
+  margin-bottom: 9px;
+}
 .hint {
   margin-top: 6px;
   font-size: 12px;
