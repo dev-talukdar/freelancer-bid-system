@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Freelancer Project Monitor",
+  "version": "0.1.0",
+  "description": "Local-only Freelancer.com project monitoring alerts.",
+  "permissions": ["alarms", "notifications", "storage", "tabs", "offscreen"],
+  "host_permissions": [
+    "http://127.0.0.1:4300/*",
+    "http://localhost:4300/*",
+    "https://api.enaema.com/*"
+  ],
+  "action": {
+    "default_popup": "index.html"
+  },
+  "background": {
+    "service_worker": "sw.js",
+    "type": "module"
+  }
+}
