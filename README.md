@@ -23,6 +23,10 @@ Node.js 22+, npm 10.13.1, MongoDB, Chrome.
 9. Load unpacked in Chrome from `apps/extension/dist`, copy its extension ID, set `EXTENSION_ID`, and restart the backend.
 10. Enter the same `LOCAL_API_SECRET` in the extension popup.
 
+The popup's **Local API key** is `LOCAL_API_SECRET`, which authenticates the extension to the local
+backend. The separately reported **Freelancer token** is `FREELANCER_ACCESS_TOKEN`, which lets the
+backend call Freelancer.com. Both must be configured; they are not interchangeable.
+
 ## Environment variables
 
 See `.env.example`: `NODE_ENV`, `PORT`, `HOST`, `MONGODB_URI`, `FREELANCER_ACCESS_TOKEN`, `FREELANCER_TOKEN_EXPIRES_AT`, `FREELANCER_API_BASE_URL`, `EXTENSION_ID`, `LOCAL_API_SECRET`, `LOG_LEVEL`, `DETECTED_PROJECT_RETENTION_DAYS`.
@@ -62,6 +66,13 @@ Bind to `127.0.0.1` only. Never commit `.env`. Use a long random `LOCAL_API_SECR
 ## Troubleshooting
 
 - Disconnected popup: backend stopped, wrong secret, or `EXTENSION_ID`/CORS mismatch.
+- Backend fails with a missing `@fbs/shared/dist/index.js`: pull this version and rerun
+  `npm run dev:api`; workspace builds force regeneration of ignored `dist` output even when a stale
+  TypeScript build-info file exists.
+- Backend exits during configuration: create `.env` from `.env.example`, set a 16+ character
+  `LOCAL_API_SECRET`, configure `MONGODB_URI`, and ensure MongoDB is running.
+- Local API key missing: enter the backend's `LOCAL_API_SECRET` in the popup and select **Save**.
+- Freelancer token missing: set `FREELANCER_ACCESS_TOKEN` in `.env`, then restart the backend.
 - Token warning: update the Freelancer token before the 30-day expiration.
 - No projects: configure `SearchProfile.jobIds` and/or `SearchProfile.keywords`; leave them empty only when you intentionally want no skill-ID or text restriction.
 - Sound missing: verify Chrome allows extension offscreen documents and rebuild the extension.

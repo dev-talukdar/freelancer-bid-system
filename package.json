@@ -20,7 +20,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "npm run typecheck --workspace=@fbs/shared && npm run typecheck --workspace=@fbs/api && npm run typecheck --workspace=@fbs/extension",
-    "test": "npm run test --workspaces --if-present",
+    "test": "npm run build --workspace=@fbs/shared && npm run test --workspaces --if-present",
     "test:watch": "npm run test:watch --workspaces --if-present",
     "format": "prettier . --write",
     "format:check": "prettier . --check"

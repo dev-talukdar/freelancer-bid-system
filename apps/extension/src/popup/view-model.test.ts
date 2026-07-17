@@ -59,6 +59,19 @@ describe('popup view model', () => {
     expect(getApiKeyStatus('secret', undefined, 'Unauthorized API key')).toBe('invalid');
   });
 
+  it('keeps authenticated controls unavailable until a local API key is configured', () => {
+    const vm = buildPopupViewModel({
+      health: health(false),
+      secret: '',
+      isPolling: false,
+      actionPending: false,
+    });
+    expect(vm.backendConnected).toBe(true);
+    expect(vm.apiKeyStatus).toBe('missing');
+    expect(vm.startUnavailable).toBe(true);
+    expect(vm.pollUnavailable).toBe(true);
+  });
+
   it('handles backend disconnected state without showing monitoring healthy', () => {
     const disconnected = { ...health(true), database: 'disconnected' as const };
     const vm = buildPopupViewModel({

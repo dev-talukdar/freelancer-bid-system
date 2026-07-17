@@ -24,7 +24,7 @@ export function getApiKeyStatus(secret: string, health?: HealthDto, loadError = 
   const lower = loadError.toLowerCase();
   if (lower.includes('unauthorized') || lower.includes('forbidden') || lower.includes('api key'))
     return 'invalid';
-  return health?.freelancerTokenConfigured === false ? 'missing' : 'valid';
+  return health ? 'valid' : 'invalid';
 }
 
 export function buildPopupViewModel(params: {
@@ -56,9 +56,12 @@ export function buildPopupViewModel(params: {
     pollIntervalSeconds,
     unreadCount: params.health?.monitoring.unreadCount ?? 0,
     isPolling: params.isPolling || (params.health?.monitoring.polling ?? false),
-    startUnavailable: monitorRunning || params.actionPending || !backendConnected,
-    stopUnavailable: !monitorRunning || params.actionPending || !backendConnected,
-    pollUnavailable: params.isPolling || params.actionPending || !backendConnected,
+    startUnavailable:
+      monitorRunning || params.actionPending || !backendConnected || !params.secret.trim(),
+    stopUnavailable:
+      !monitorRunning || params.actionPending || !backendConnected || !params.secret.trim(),
+    pollUnavailable:
+      params.isPolling || params.actionPending || !backendConnected || !params.secret.trim(),
   };
 }
 
