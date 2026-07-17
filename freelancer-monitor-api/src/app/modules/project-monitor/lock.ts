@@ -1,0 +1,15 @@
+export class PollLock {
+  private locked = false;
+  isLocked() {
+    return this.locked;
+  }
+  async runExclusive<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.locked) throw new Error('Poll already running');
+    this.locked = true;
+    try {
+      return await fn();
+    } finally {
+      this.locked = false;
+    }
+  }
+}
