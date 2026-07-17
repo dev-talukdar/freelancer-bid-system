@@ -101,9 +101,10 @@ chrome.runtime.onMessage.addListener((message: unknown) => {
     typeof message === 'object' &&
     message !== null &&
     'type' in message &&
-    message.type === 'CHECK_NOTIFICATIONS'
+    (message.type === 'CHECK_NOTIFICATIONS' || message.type === 'SETTINGS_UPDATED')
   ) {
-    check().catch((error: unknown) => logAsyncError('Manual notification check failed', error));
+    const action = message.type === 'SETTINGS_UPDATED' ? initializePolling : check;
+    action().catch((error: unknown) => logAsyncError('Manual notification check failed', error));
   }
 });
 
