@@ -1,10 +1,10 @@
 # Freelancer Project Monitor
 
-Private local-first monitor for Freelancer.com projects. Phase 1 validates a Personal Access Token, polls active projects, filters matches, persists deduplication state, and lets a Chrome Manifest V3 extension display notifications and play a local sound. **Automatic bid submission, proposal generation, messaging, scraping, and browser automation are not implemented.**
+Private monitor for Freelancer.com projects. The backend may run locally or at `https://api.enaema.net`; the Chrome extension stores its backend URL and API key locally. **Automatic bid submission, proposal generation, messaging, scraping, and browser automation are not implemented.**
 
 ## Architecture
 
-Freelancer API → local Node/Express API at `127.0.0.1:4300` → MongoDB persistence/deduplication → Chrome extension popup/service worker/offscreen audio. The extension only calls local routes and never receives the Freelancer token.
+Freelancer API → Node/Express API → MongoDB persistence/deduplication → Chrome extension popup/service worker/offscreen audio. The extension receives only `LOCAL_API_SECRET`, never the Freelancer token.
 
 ## Prerequisites
 
@@ -21,11 +21,11 @@ Node.js 22+, npm 10.13.1, MongoDB, Chrome.
 7. Validate token: call `GET http://127.0.0.1:4300/api/v1/freelancer/me` with header `X-Local-API-Key: <LOCAL_API_SECRET>`.
 8. Build extension: `npm run build:extension`.
 9. Load unpacked in Chrome from `apps/extension/dist`, copy its extension ID, set `EXTENSION_ID`, and restart the backend.
-10. Enter the same `LOCAL_API_SECRET` in the extension popup.
+10. In the extension popup, enter the backend URL and the same `LOCAL_API_SECRET`, then click **Save**.
 
 ## Environment variables
 
-See `.env.example`: `NODE_ENV`, `PORT`, `HOST`, `MONGODB_URI`, `FREELANCER_ACCESS_TOKEN`, `FREELANCER_TOKEN_EXPIRES_AT`, `FREELANCER_API_BASE_URL`, `EXTENSION_ID`, `LOCAL_API_SECRET`, `LOG_LEVEL`, `DETECTED_PROJECT_RETENTION_DAYS`.
+See `.env.example`: `NODE_ENV`, `PORT`, `HOST`, `MONGODB_URI`, `FREELANCER_ACCESS_TOKEN`, `FREELANCER_TOKEN_EXPIRES_AT`, `FREELANCER_API_BASE_URL`, `EXTENSION_ID`, `LOCAL_API_SECRET`, `VITE_API_BASE_URL`, `LOG_LEVEL`, `DETECTED_PROJECT_RETENTION_DAYS`.
 
 ## Search profile filtering
 
@@ -57,15 +57,16 @@ The extension polls unread detected projects, creates `chrome.notifications`, ma
 
 ## Security warnings
 
-Bind to `127.0.0.1` only. Never commit `.env`. Use a long random `LOCAL_API_SECRET`. Pino redacts auth headers and secrets. CORS is restricted to your Chrome extension origin once `EXTENSION_ID` is configured. The Freelancer token is backend-only and never sent to extension code.
+For local use, bind to `127.0.0.1`. For EC2, put the API behind HTTPS, keep the application port firewalled, and set `EXTENSION_ID` to the ID shown by Chrome for the unpacked extension. Never commit `.env`. Use a long random `LOCAL_API_SECRET`. Pino redacts auth headers and secrets. The Freelancer token is backend-only and never sent to extension code.
 
 ## Troubleshooting
 
-- Disconnected popup: backend stopped, wrong secret, or `EXTENSION_ID`/CORS mismatch.
+- Disconnected popup: save `https://api.enaema.net` and the EC2 `LOCAL_API_SECRET` in the popup; then verify `https://api.enaema.net/api/v1/health`. An `INVALID_LOCAL_API_KEY` response from `/api/v1` is expected because protected routes require the header and `/api/v1` is not the health endpoint.
+- CORS failure: set the EC2 `EXTENSION_ID` to the exact ID at `chrome://extensions` and restart the API.
 - Token warning: update the Freelancer token before the 30-day expiration.
 - No projects: configure `SearchProfile.jobIds` and/or `SearchProfile.keywords`; leave them empty only when you intentionally want no skill-ID or text restriction.
 - Sound missing: verify Chrome allows extension offscreen documents and rebuild the extension.
 
 ## Current limitations
 
-Single-process lock only, local MongoDB dependency, one active profile at a time in UI workflow, no deployment config, no bidding/proposals/messaging.
+Single-process lock only, one active profile at a time in UI workflow, no infrastructure-as-code, no bidding/proposals/messaging.
